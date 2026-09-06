@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event Management Platform</title>
+    <style>
+        body { font-family: sans-serif; padding: 2rem; background-color: #f4f4f9; }
+        .card { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 400px; margin: auto; text-align: center; }
+        button { background-color: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; margin-top: 10px; }
+        button:hover { background-color: #0056b3; }
+        #response-text { margin-top: 20px; font-weight: bold; color: #333; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>College Connect Setup</h2>
+        <p>Click the button below to test the connection to your Python backend.</p>
+        <button id="ping-btn">Ping Backend</button>
+        <p id="response-text">Status: Waiting...</p>
+    </div>
+
+    <script>
+        // Select elements from the DOM (Document Object Model)
+        const pingBtn = document.getElementById('ping-btn');
+        const responseText = document.getElementById('response-text');
+
+        // Add a click listener to the button
+        pingBtn.addEventListener('click', async () => {
+            responseText.innerText = "Status: Loading...";
+            
+            try {
+                // The fetch() API makes a network request to our FastAPI server
+                const response = await fetch('http://127.0.0.1:8000/api/status');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                // Parse the JSON data sent back from Python
+                const data = await response.json();
+                
+                // Display the message on the screen
+                responseText.innerText = `Status: ${data.message}`;
+                responseText.style.color = "green";
+                
+            } catch (error) {
+                // If the backend isn't running or there is a CORS error
+                console.error("Error connecting to backend:", error);
+                responseText.innerText = "Status: Connection Failed! Is the backend running?";
+                responseText.style.color = "red";
+            }
+        });
+    </script>
+</body>
+</html>
