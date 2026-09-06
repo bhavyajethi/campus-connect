@@ -37,3 +37,16 @@ class EventResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class RegistrationCreate(BaseModel):
+    user_id : UUID
+    event_id : UUID
+
+class RegistrationResponse(BaseModel):  
+    id : UUID
+    user_id : UUID
+    event_id : UUID
+    status: str
+
+    class Config:
+        from_attributes = True
