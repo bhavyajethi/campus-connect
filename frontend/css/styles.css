@@ -1,0 +1,8 @@
+/* Smooth transitions across elements */
+body {
+    -webkit-font-smoothing: antialiased;
+}
+
+button, input {
+    transition: all 0.2s ease-in-out;
+}
