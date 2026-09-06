@@ -122,3 +122,28 @@ def get_qr_code(ticket_id: UUID):
     
     # 4. Stream the image directly to the browser
     return StreamingResponse(buf, media_type="image/png")
+
+# STEP 8: Admin Ticket Verification (Scanner API)
+@app.post("/verifications/", response_model=schemas.VerificationResponse, status_code=status.HTTP_201_CREATED)
+def create_verification(verification: schemas.VerificationResponse, db: Session = Depends(get_db)):
+    # 1) Verify the ticket in the database
+    registration = db.query(models.Registration).filter(models.Registration.id == verification.ticket_id).first()
+    
+    if not registration:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    # 2. Check if the ticket has already been used
+    if registration.status == "attended":
+        raise HTTPException(status_code=400, detail="Ticket has already been used")
+
+    # 3) Update the registration status to "attended"
+    registration.status = "attended"
+    db.commit()
+    db.refresh(registration)    
+
+    return {
+        "message":"Registration Successful",
+        "ticket_id":registration.id,
+        "user_id":registration.user_id,
+        "status":registration.status
+    }

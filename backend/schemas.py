@@ -37,15 +37,27 @@ class EventResponse(BaseModel):
 
     class Config:
         from_attributes = True
-
+        
+# Input Event : Registration schema for creating a new registration per user
 class RegistrationCreate(BaseModel):
     user_id : UUID
     event_id : UUID
-
+# Output Event : Registration schema for returning registration details
 class RegistrationResponse(BaseModel):  
     id : UUID
     user_id : UUID
     event_id : UUID
+    status: str
+
+    class Config:
+        from_attributes = True
+
+# Output Event : Verification schema for returning verification details
+# Output Schema: What the scanner sees when verifying a ticket
+class VerificationResponse(BaseModel):
+    message: str
+    ticket_id: UUID
+    user_id: UUID
     status: str
 
     class Config:
