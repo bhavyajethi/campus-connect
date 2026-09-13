@@ -37,7 +37,6 @@ async function loadEvents() {
                 </div>
                 <div class="pt-4 border-t border-slate-100 flex items-center justify-between">
                     <span class="text-xs text-slate-400 font-mono truncate max-w-[180px]">ID: ${event.id}</span>
-                    // Inside loadEvents(), update the button template line to:
                     <button onclick="prefillRegister('${event.id}', '${event.name}')" class="text-xs bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg font-medium">Select</button>
                 </div>
             </div>
