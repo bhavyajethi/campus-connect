@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from typing import List
 from datetime import date
+from backend import auth
 
 # Import our database engine and models
 from database import engine
@@ -35,20 +36,32 @@ async def check_status():
 
 @app.post("/users/", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    db_user = db.query(models.User).filter(models.User.email == user.email).first()
-    if db_user:
+    existing_user = db.query(models.User).filter(models.User.email == user.email).first()
+    if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
-    
+        
+    hashed_pwd = auth.hash_password(user.password)
     new_user = models.User(
         name=user.name,
         email=user.email,
         role=user.role,
-        year=user.year
+        year=user.year,
+        password_hash=hashed_pwd
     )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
     return new_user
+
+# Login Route returning JWT Token
+@app.post("/login", response_model=schemas.Token)
+def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.email == credentials.email).first()
+    if not user or not auth.verify_password(credentials.password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Invalid email or password")
+        
+    access_token = auth.create_access_token(data={"sub": str(user.id)})
+    return {"access_token": access_token, "token_type": "bearer"}
 
 @app.post("/events/", response_model=schemas.EventResponse, status_code=status.HTTP_201_CREATED)
 def create_event(event: schemas.EventCreate, db: Session = Depends(get_db)):
@@ -110,6 +123,31 @@ def create_registration(reg: schemas.RegistrationCreate, db: Session = Depends(g
     db.commit()
     db.refresh(new_reg)
     
+    return new_reg
+
+@app.post("/registrations/authenticated/", response_model=schemas.RegistrationResponse)
+def create_registration_authenticated(
+    event_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    # Verify event exists
+    event = db.query(models.Event).filter(models.Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+        
+    # Check duplicate registration using current_user.id
+    existing_reg = db.query(models.Registration).filter(
+        models.Registration.user_id == current_user.id,
+        models.Registration.event_id == event_id
+    ).first()
+    if existing_reg:
+        raise HTTPException(status_code=400, detail="User already registered for this event")
+        
+    new_reg = models.Registration(user_id=current_user.id, event_id=event_id)
+    db.add(new_reg)
+    db.commit()
+    db.refresh(new_reg)
     return new_reg
 
 

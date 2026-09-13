@@ -23,6 +23,7 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     role = Column(Enum(RoleEnum), default=RoleEnum.student, nullable=False)
     year = Column(Integer, nullable=True) # Year is optional (volunteers/organizers might not need it)
+    password_hash = Column(String, nullable=False)
 
 class Event(Base):
   __tablename__ = "events"

@@ -9,6 +9,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     role: str = "student"
     year: Optional[int] = None
+    password: str
 
 class UserResponse(BaseModel):
     id: UUID
@@ -62,3 +63,15 @@ class VerificationResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+# Authentication Schemas
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    user_id: Optional[str] = None
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
