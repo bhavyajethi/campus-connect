@@ -8,6 +8,7 @@ import io
 from sqlalchemy.orm import Session
 from database import get_db
 from typing import List
+from datetime import date
 
 # Import our database engine and models
 from database import engine
@@ -70,7 +71,13 @@ def create_event(event: schemas.EventCreate, db: Session = Depends(get_db)):
 @app.get("/events/", response_model=List[schemas.EventResponse])
 def get_events(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     # Fetch a list of events from the database
-    events = db.query(models.Event).offset(skip).limit(limit).all()
+    events = (
+        db.query(models.Event)
+        .filter(models.Event.date >= date.today())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
     return events
 
 @app.post("/registrations/", response_model=schemas.RegistrationResponse, status_code=status.HTTP_201_CREATED)
