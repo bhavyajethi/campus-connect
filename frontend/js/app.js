@@ -37,7 +37,8 @@ async function loadEvents() {
                 </div>
                 <div class="pt-4 border-t border-slate-100 flex items-center justify-between">
                     <span class="text-xs text-slate-400 font-mono truncate max-w-[180px]">ID: ${event.id}</span>
-                    <button onclick="prefillRegister('${event.id}')" class="text-xs bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg font-medium">Select</button>
+                    // Inside loadEvents(), update the button template line to:
+                    <button onclick="prefillRegister('${event.id}', '${event.name}')" class="text-xs bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg font-medium">Select</button>
                 </div>
             </div>
         `).join('');
@@ -47,9 +48,20 @@ async function loadEvents() {
 }
 
 // Quick prefill helper when clicking "Select" on an event card
-function prefillRegister(eventId) {
+// Enhanced prefill helper when clicking "Select" on an event card
+function prefillRegister(eventId, eventName) {
+    // 1. Switch to the registration tab
     switchTab('register');
-    document.getElementById('reg-event-id').value = eventId;
+    
+    // 2. Auto-fill the event ID input field
+    const eventInput = document.getElementById('reg-event-id');
+    eventInput.value = eventId;
+    
+    // 3. Provide visual feedback (highlight the auto-filled input)
+    eventInput.classList.add('border-indigo-600', 'bg-indigo-50/50');
+    
+    // 4. Focus the user ID field so the student only has to enter their own ID
+    document.getElementById('reg-user-id').focus();
 }
 
 // Handle Registration Form Submit
