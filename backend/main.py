@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from typing import List
 from datetime import date
-from backend import auth
+import auth
 
 # Import our database engine and models
 from database import engine

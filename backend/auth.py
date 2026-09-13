@@ -5,7 +5,7 @@ from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
-from backend import models, database
+import models, database
 
 # Secret key & algorithm settings for JWT signing
 SECRET_KEY = "SUPER_SECRET_CAMPUS_CONNECT_KEY_CHANGE_IN_PRODUCTION"
