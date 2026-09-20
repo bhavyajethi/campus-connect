@@ -12,7 +12,9 @@ load_dotenv()
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
 
 # The Engine is the core interface to the database.
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
+engine = create_engine(SQLALCHEMY_DATABASE_URL,
+                        pool_pre_ping=True,  # Checks if connection is alive before sending queries
+                        pool_recycle=300)
 
 # A SessionLocal class. Each instance of this class will be an actual database session.
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

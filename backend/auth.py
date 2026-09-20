@@ -15,12 +15,17 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 Hours
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-# 1. Password Hashing Helpers
+# In backend/auth.py
+
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    # Bcrypt only evaluates up to the first 72 bytes.
+    # Truncate string bytes to prevent bcrypt 72-byte error
+    truncated_password = password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
+    return pwd_context.hash(truncated_password)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    truncated_password = plain_password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
+    return pwd_context.verify(truncated_password, hashed_password)
 
 # 2. JWT Token Generation
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
