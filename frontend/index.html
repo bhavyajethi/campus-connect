@@ -4,8 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Campus Connect | Portal</title>
-    <!-- Tailwind CSS for modern, clean UI -->
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- HTML5 QR Code Scanner Library -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col">
@@ -17,13 +19,62 @@
                 <div class="bg-indigo-600 text-white font-bold p-2 rounded-xl">CC</div>
                 <span class="text-xl font-bold tracking-tight text-slate-900">Campus Connect</span>
             </div>
-            <nav class="flex space-x-2">
+            <nav class="flex items-center space-x-2">
                 <button onclick="switchTab('events')" id="btn-events" class="px-4 py-2 text-sm font-medium rounded-lg bg-indigo-50 text-indigo-600 transition">Events</button>
                 <button onclick="switchTab('register')" id="btn-register" class="px-4 py-2 text-sm font-medium rounded-lg text-slate-600 hover:bg-slate-100 transition">Get Ticket</button>
                 <button onclick="switchTab('scanner')" id="btn-scanner" class="px-4 py-2 text-sm font-medium rounded-lg text-slate-600 hover:bg-slate-100 transition">Admin Scanner</button>
+                <div id="auth-nav-container" class="pl-4 border-l border-slate-200">
+                    <button onclick="openAuthModal()" id="btn-auth" class="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">Login / Register</button>
+                </div>
             </nav>
         </div>
     </header>
+
+    <!-- Auth Modal -->
+    <div id="auth-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 id="auth-modal-title" class="font-bold text-slate-900 text-lg">Student Login</h3>
+                <button onclick="closeAuthModal()" class="text-slate-400 hover:text-slate-600">&times;</button>
+            </div>
+            
+            <!-- Login Form -->
+            <form id="auth-login-form" class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Email</label>
+                    <input type="email" id="login-email" required class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Password</label>
+                    <input type="password" id="login-password" required class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600 outline-none">
+                </div>
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-xl transition text-sm">Login</button>
+                <p class="text-xs text-center text-slate-500 pt-2">Don't have an account? <a href="#" onclick="toggleAuthMode('signup')" class="text-indigo-600 hover:underline">Sign up</a></p>
+            </form>
+
+            <!-- Signup Form -->
+            <form id="auth-signup-form" class="hidden space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Full Name</label>
+                    <input type="text" id="signup-name" required class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Email</label>
+                    <input type="email" id="signup-email" required class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Academic Year</label>
+                    <input type="number" id="signup-year" value="1" min="1" max="5" required class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Password</label>
+                    <input type="password" id="signup-password" required class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600 outline-none">
+                </div>
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-xl transition text-sm">Create Account</button>
+                <p class="text-xs text-center text-slate-500 pt-2">Already have an account? <a href="#" onclick="toggleAuthMode('login')" class="text-indigo-600 hover:underline">Login</a></p>
+            </form>
+        </div>
+    </div>
 
     <!-- Main Container -->
     <main class="flex-grow max-w-6xl w-full mx-auto p-6">
@@ -34,25 +85,19 @@
                 <h1 class="text-2xl font-bold tracking-tight text-slate-900">Upcoming Campus Events</h1>
                 <button onclick="loadEvents()" class="text-sm text-indigo-600 hover:underline font-medium">Refresh List</button>
             </div>
-            <div id="events-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <!-- Dynamically injected event cards go here -->
-            </div>
+            <div id="events-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
         </section>
 
         <!-- Tab 2: Register & Ticket View -->
         <section id="tab-register" class="hidden max-w-xl mx-auto bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
             <div>
                 <h2 class="text-2xl font-bold tracking-tight text-slate-900">Register for Event</h2>
-                <p class="text-sm text-slate-500 mt-1">Enter your User ID and the Event ID to secure your digital ticket.</p>
+                <p class="text-sm text-slate-500 mt-1">Select an event to secure your digital QR ticket.</p>
             </div>
             <form id="registration-form" class="space-y-4">
                 <div>
-                    <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">User UUID</label>
-                    <input type="text" id="reg-user-id" required placeholder="e.g., c3a5d2..." class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-600 focus:outline-none text-sm">
-                </div>
-                <div>
                     <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Event UUID</label>
-                    <input type="text" id="reg-event-id" required placeholder="e.g., f8e2a1..." class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-600 focus:outline-none text-sm">
+                    <input type="text" id="reg-event-id" required placeholder="Select an event from the catalog..." class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-600 focus:outline-none text-sm">
                 </div>
                 <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-xl transition shadow-sm">Generate Ticket & QR</button>
             </form>
@@ -69,14 +114,27 @@
         <section id="tab-scanner" class="hidden max-w-xl mx-auto bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
             <div>
                 <h2 class="text-2xl font-bold tracking-tight text-slate-900">Gate Check-In Scanner</h2>
-                <p class="text-sm text-slate-500 mt-1">Verify student tickets instantly at the event entrance.</p>
+                <p class="text-sm text-slate-500 mt-1">Use camera or manual entry to verify student tickets instantly.</p>
             </div>
-            <form id="scanner-form" class="space-y-4">
-                <div>
-                    <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Ticket UUID</label>
-                    <input type="text" id="scan-ticket-id" required placeholder="Paste ticket UUID here..." class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-600 focus:outline-none text-sm">
+            
+            <!-- Live Camera Feed Container -->
+            <div class="space-y-3">
+                <div id="reader" class="w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 min-h-[250px] flex items-center justify-center text-white text-xs">
+                    Camera Feed Offline
                 </div>
-                <button type="submit" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-medium py-2.5 rounded-xl transition shadow-sm">Verify & Check-In</button>
+                <div class="flex space-x-2">
+                    <button id="btn-start-camera" onclick="startCameraScanner()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-xl text-xs font-medium transition">Start Camera</button>
+                    <button id="btn-stop-camera" onclick="stopCameraScanner()" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 py-2 rounded-xl text-xs font-medium transition">Stop Camera</button>
+                </div>
+            </div>
+
+            <!-- Fallback Manual Verification Form -->
+            <form id="scanner-form" class="space-y-4 pt-4 border-t border-slate-100">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Manual Ticket UUID</label>
+                    <input type="text" id="scan-ticket-id" placeholder="Paste ticket UUID..." class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-600 focus:outline-none text-sm">
+                </div>
+                <button type="submit" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-medium py-2.5 rounded-xl transition shadow-sm">Verify Manually</button>
             </form>
             <div id="scanner-result" class="hidden p-4 rounded-xl text-sm font-medium"></div>
         </section>
