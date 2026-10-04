@@ -1,8 +1,14 @@
-/* Smooth transitions across elements */
+/* Smooth visual transitions across interactive components */
 body {
     -webkit-font-smoothing: antialiased;
 }
 
-button, input {
+button, input, select {
     transition: all 0.2s ease-in-out;
+}
+
+/* Custom styling for HTML5 QR Scanner Video Element */
+#reader video {
+    object-fit: cover !important;
+    border-radius: 1rem;
 }

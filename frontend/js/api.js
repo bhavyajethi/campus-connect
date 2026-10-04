@@ -1,7 +1,7 @@
 const API_BASE = "http://127.0.0.1:8000";
 
 const api = {
-    // 1. Auth Endpoints
+    // 1. User Authentication APIs
     async login(email, password) {
         const response = await fetch(`${API_BASE}/login`, {
             method: "POST",
@@ -24,14 +24,14 @@ const api = {
         return data;
     },
 
-    // 2. Events Endpoint
+    // 2. Event Catalog APIs
     async fetchEvents() {
         const response = await fetch(`${API_BASE}/events/`);
         if (!response.ok) throw new Error("Failed to fetch events");
         return await response.json();
     },
 
-    // 3. Authenticated Registration Endpoint
+    // 3. Authenticated Event Registration API
     async registerAuthenticated(eventId, token) {
         const response = await fetch(`${API_BASE}/registrations/authenticated/?event_id=${eventId}`, {
             method: "POST",
@@ -45,7 +45,7 @@ const api = {
         return data;
     },
 
-    // 4. Gate Verification & QR Endpoints
+    // 4. Admin Gate QR Verification APIs
     async verifyTicket(ticketId) {
         const response = await fetch(`${API_BASE}/registrations/${ticketId}/verify`, {
             method: "POST"

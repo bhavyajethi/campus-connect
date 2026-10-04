@@ -1,6 +1,6 @@
 let html5QrCode = null;
 
-// --- Auth Modal & State Management ---
+// --- Auth Modal & Session State Handlers ---
 function openAuthModal() {
     document.getElementById('auth-modal').classList.remove('hidden');
 }
@@ -41,7 +41,7 @@ function logout() {
     alert('Logged out successfully');
 }
 
-// --- Tab Switching Utility ---
+// --- Tab Switching Navigation ---
 function switchTab(tabName) {
     const tabs = ['events', 'register', 'scanner'];
     tabs.forEach(t => {
@@ -54,22 +54,34 @@ function switchTab(tabName) {
 
     if (tabName !== 'scanner') {
         stopCameraScanner();
-    } else {
+    }
+    
+    if (tabName === 'events' || tabName === 'register') {
         loadEvents();
     }
 }
 
-// --- Load Events ---
+// --- Load Events Catalog & Populate Selection Dropdown ---
 async function loadEvents() {
     const grid = document.getElementById('events-grid');
+    const selectDropdown = document.getElementById('reg-event-select');
     grid.innerHTML = `<p class="text-sm text-slate-400 col-span-full text-center py-10">Loading events...</p>`;
     
     try {
         const events = await api.fetchEvents();
+        
+        // Reset Dropdown
+        selectDropdown.innerHTML = `<option value="" disabled selected>-- Select an Event --</option>`;
+
         if (events.length === 0) {
-            grid.innerHTML = `<p class="text-sm text-slate-400 col-span-full text-center py-10">No upcoming events found.</p>`;
+            grid.innerHTML = `<p class="text-sm text-slate-400 col-span-full text-center py-10">No upcoming events found. Create one in Swagger UI with a future date!</p>`;
             return;
         }
+
+        // Populate Dropdown & Event Cards Grid
+        events.forEach(event => {
+            selectDropdown.innerHTML += `<option value="${event.id}">${event.name} (${event.date})</option>`;
+        });
 
         grid.innerHTML = events.map(event => `
             <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4 flex flex-col justify-between">
@@ -80,9 +92,8 @@ async function loadEvents() {
                     </div>
                     <p class="text-sm text-slate-600 line-clamp-3">${event.description || "No description provided."}</p>
                 </div>
-                <div class="pt-4 border-t border-slate-100 flex items-center justify-between">
-                    <span class="text-xs text-slate-400 font-mono truncate max-w-[180px]">ID: ${event.id}</span>
-                    <button onclick="prefillRegister('${event.id}', '${event.name}')" class="text-xs bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg font-medium">Select</button>
+                <div class="pt-4 border-t border-slate-100 flex items-center justify-end">
+                    <button onclick="prefillRegister('${event.id}')" class="text-xs bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg font-medium">Select Event</button>
                 </div>
             </div>
         `).join('');
@@ -91,14 +102,13 @@ async function loadEvents() {
     }
 }
 
-function prefillRegister(eventId, eventName) {
+function prefillRegister(eventId) {
     switchTab('register');
-    const eventInput = document.getElementById('reg-event-id');
-    eventInput.value = eventId;
-    eventInput.classList.add('border-indigo-600', 'bg-indigo-50/50');
+    const selectDropdown = document.getElementById('reg-event-select');
+    selectDropdown.value = eventId;
 }
 
-// --- Auth Form Submit Handlers ---
+// --- Auth Form Listeners ---
 document.getElementById('auth-login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const email = document.getElementById('login-email').value.trim();
@@ -134,16 +144,21 @@ document.getElementById('auth-signup-form').addEventListener('submit', async (e)
     }
 });
 
-// --- Handle Ticket Registration Submit ---
+// --- Ticket Registration Submission ---
 document.getElementById('registration-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const eventId = document.getElementById('reg-event-id').value.trim();
+    const eventId = document.getElementById('reg-event-select').value;
     const token = localStorage.getItem('token');
     const resultBox = document.getElementById('ticket-result');
     const qrImg = document.getElementById('qr-image');
 
+    if (!eventId) {
+        alert("Please select an event from the dropdown list!");
+        return;
+    }
+
     if (!token) {
-        alert("Please login first to register for events!");
+        alert("Please login first to claim tickets!");
         openAuthModal();
         return;
     }
@@ -157,7 +172,7 @@ document.getElementById('registration-form').addEventListener('submit', async (e
     }
 });
 
-// --- Live Camera Scanner Functions (`html5-qrcode`) ---
+// --- Live Camera Scanner Functions ---
 async function startCameraScanner() {
     const resultBox = document.getElementById('scanner-result');
     resultBox.classList.add('hidden');
@@ -169,13 +184,12 @@ async function startCameraScanner() {
     try {
         await html5QrCode.start(
             { facingMode: "environment" },
-            { fps: 10, qrbox: { width: 200, height: 200 } },
+            { fps: 10, qrbox: { width: 220, height: 220 } },
             async (decodedText) => {
-                // On QR scan success
                 stopCameraScanner();
                 await processTicketVerification(decodedText);
             },
-            () => {} // Silent catch on frame scan misses
+            () => {} // Silent catch for unmatched video frames
         );
     } catch (err) {
         alert(`Camera access error: ${err.message}`);
@@ -188,28 +202,20 @@ async function stopCameraScanner() {
     }
 }
 
-// Common ticket verification logic
 async function processTicketVerification(ticketId) {
     const resultBox = document.getElementById('scanner-result');
     try {
         const data = await api.verifyTicket(ticketId);
         resultBox.className = "p-4 rounded-xl text-sm font-medium bg-emerald-50 text-emerald-800 border border-emerald-200";
-        resultBox.textContent = `Success! ${data.message} (User ID: ${data.user_id})`;
+        resultBox.textContent = `SUCCESS: ${data.message} (User ID: ${data.user_id})`;
         resultBox.classList.remove('hidden');
     } catch (err) {
         resultBox.className = "p-4 rounded-xl text-sm font-medium bg-rose-50 text-rose-800 border border-rose-200";
-        resultBox.textContent = `Denied: ${err.message}`;
+        resultBox.textContent = `DENIED: ${err.message}`;
         resultBox.classList.remove('hidden');
     }
 }
 
-// Manual Scanner Form Handler
-document.getElementById('scanner-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const ticketId = document.getElementById('scan-ticket-id').value.trim();
-    await processTicketVerification(ticketId);
-});
-
-// Startup Initialization
+// Initializing state on app start
 updateAuthUI();
 loadEvents();
