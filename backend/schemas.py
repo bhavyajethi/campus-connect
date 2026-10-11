@@ -1,5 +1,5 @@
-from pydantic import BaseModel, EmailStr
-from typing import Optional, List
+from pydantic import BaseModel, ConfigDict, EmailStr
+from typing import Optional
 from uuid import UUID
 from datetime import date
 
@@ -18,8 +18,7 @@ class UserResponse(BaseModel):
     role: str
     year: Optional[int]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # --- NEW: Event Schemas ---
 
@@ -36,8 +35,7 @@ class EventResponse(BaseModel):
     date: date
     description: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
         
 # Input Event : Registration schema for creating a new registration per user
 class RegistrationCreate(BaseModel):
@@ -50,8 +48,7 @@ class RegistrationResponse(BaseModel):
     event_id : UUID
     status: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # Output Event : Verification schema for returning verification details
 # Output Schema: What the scanner sees when verifying a ticket
@@ -61,8 +58,7 @@ class VerificationResponse(BaseModel):
     user_id: UUID
     status: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # Authentication Schemas
 class Token(BaseModel):

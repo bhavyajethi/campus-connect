@@ -1,6 +1,20 @@
 let html5QrCode = null;
 let generatedTicketId = null;
 
+function showToast(message, type = 'success') {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    const styles = {
+        success: 'bg-emerald-700 text-white border-emerald-800',
+        error: 'bg-rose-700 text-white border-rose-800',
+        info: 'bg-slate-900 text-white border-slate-950'
+    };
+    toast.className = `rounded-lg border px-4 py-3 text-sm font-semibold shadow-lg ${styles[type] || styles.info}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    window.setTimeout(() => toast.remove(), 5000);
+}
+
 // --- Auth Modal & Session State Handlers ---
 function openAuthModal() {
     document.getElementById('auth-modal').classList.remove('hidden');
@@ -39,7 +53,7 @@ function updateAuthUI() {
 function logout() {
     localStorage.removeItem('token');
     updateAuthUI();
-    alert('Logged out successfully');
+    showToast('Logged out successfully.', 'info');
 }
 
 // --- Tab Switching Navigation ---
@@ -58,7 +72,7 @@ function switchTab(tabName) {
     }
     
     if (tabName === 'events' || tabName === 'register') {
-        loadEvents();
+        return loadEvents();
     }
 }
 
@@ -66,12 +80,13 @@ function switchTab(tabName) {
 async function loadEvents() {
     const grid = document.getElementById('events-grid');
     const selectDropdown = document.getElementById('reg-event-select');
+    grid.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6';
     grid.innerHTML = `<p class="text-sm text-slate-400 col-span-full text-center py-10">Loading events...</p>`;
     
     try {
         const events = await api.fetchEvents();
         
-        // Reset Dropdown
+        const selectedEventId = selectDropdown.value;
         selectDropdown.innerHTML = `<option value="" disabled selected>-- Select an Event --</option>`;
 
         if (events.length === 0) {
@@ -83,6 +98,9 @@ async function loadEvents() {
         events.forEach(event => {
             selectDropdown.innerHTML += `<option value="${event.id}">${event.name} (${event.date})</option>`;
         });
+        if (events.some(event => event.id === selectedEventId)) {
+            selectDropdown.value = selectedEventId;
+        }
 
         grid.innerHTML = events.map(event => `
             <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4 flex flex-col justify-between">
@@ -99,15 +117,49 @@ async function loadEvents() {
             </div>
         `).join('');
     } catch (err) {
-        grid.innerHTML = `<p class="text-sm text-rose-600 col-span-full text-center py-10">Error loading events: ${err.message}</p>`;
+        grid.textContent = `Unable to load events: ${err.message}`;
+        grid.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-sm text-rose-700';
+        if (err.status !== 401) showToast(err.message, 'error');
     }
 }
 
-function prefillRegister(eventId) {
-    switchTab('register');
+async function prefillRegister(eventId) {
+    await switchTab('register');
     const selectDropdown = document.getElementById('reg-event-select');
     selectDropdown.value = eventId;
+    await restoreSelectedEventTicket();
 }
+
+function displayTicket(registration, previouslyClaimed = false) {
+    generatedTicketId = registration.id;
+    document.getElementById('qr-image').src = api.getQrCodeUrl(registration.id);
+    const status = document.getElementById('ticket-status');
+    status.textContent = previouslyClaimed ? 'Ticket Previously Claimed' : 'Ticket Successfully Generated!';
+    status.className = previouslyClaimed
+        ? 'p-3 bg-amber-100 text-amber-950 rounded-xl text-sm font-semibold border border-amber-300'
+        : 'p-3 bg-emerald-50 text-emerald-800 rounded-xl text-sm font-semibold border border-emerald-200';
+    document.getElementById('ticket-result').classList.remove('hidden');
+}
+
+async function restoreSelectedEventTicket() {
+    const eventId = document.getElementById('reg-event-select').value;
+    const token = localStorage.getItem('token');
+    const resultBox = document.getElementById('ticket-result');
+    generatedTicketId = null;
+    resultBox.classList.add('hidden');
+    if (!eventId || !token) return;
+
+    try {
+        const registration = await api.fetchMyTicket(eventId, token);
+        if (document.getElementById('reg-event-select').value !== eventId) return;
+        displayTicket(registration, true);
+        showToast('Ticket Previously Claimed. Your existing QR ticket is ready.', 'info');
+    } catch (err) {
+        if (err.status !== 404 && err.status !== 401) showToast(err.message, 'error');
+    }
+}
+
+document.getElementById('reg-event-select').addEventListener('change', restoreSelectedEventTicket);
 
 // --- Auth Form Listeners ---
 document.getElementById('auth-login-form').addEventListener('submit', async (e) => {
@@ -120,9 +172,9 @@ document.getElementById('auth-login-form').addEventListener('submit', async (e) 
         localStorage.setItem('token', data.access_token);
         updateAuthUI();
         closeAuthModal();
-        alert('Login successful!');
+        showToast('Login successful.', 'success');
     } catch (err) {
-        alert(`Login failed: ${err.message}`);
+        if (err.status !== 401) showToast(`Login failed: ${err.message}`, 'error');
     }
 });
 
@@ -135,13 +187,13 @@ document.getElementById('auth-signup-form').addEventListener('submit', async (e)
 
     try {
         await api.signup(name, email, year, password);
-        alert('Account created! Logging in...');
         const data = await api.login(email, password);
         localStorage.setItem('token', data.access_token);
         updateAuthUI();
         closeAuthModal();
+        showToast('Account created and logged in successfully.', 'success');
     } catch (err) {
-        alert(`Signup failed: ${err.message}`);
+        if (err.status !== 401) showToast(`Signup failed: ${err.message}`, 'error');
     }
 });
 
@@ -149,21 +201,46 @@ document.getElementById('auth-signup-form').addEventListener('submit', async (e)
 document.getElementById('registration-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const eventId = document.getElementById('reg-event-select').value;
-    const resultBox = document.getElementById('ticket-result');
-    const qrImg = document.getElementById('qr-image');
+    const token = localStorage.getItem('token');
 
     if (!eventId) {
-        alert("Please select an event from the dropdown list!");
+        showToast('Please select an event from the list.', 'error');
+        return;
+    }
+
+    if (!token) {
+        showToast('Please log in to claim a ticket.', 'info');
+        toggleAuthMode('login');
+        openAuthModal();
         return;
     }
 
     try {
-        const data = await api.registerAuthenticated(eventId);
-        generatedTicketId = data.id;
-        qrImg.src = api.getQrCodeUrl(data.id);
-        resultBox.classList.remove('hidden');
+        const existingTicket = await api.fetchMyTicket(eventId, token).catch(error => {
+            if (error.status === 404) return null;
+            throw error;
+        });
+        if (existingTicket) {
+            displayTicket(existingTicket, true);
+            showToast('Ticket Previously Claimed. Your existing QR ticket is ready.', 'info');
+            return;
+        }
+
+        const registration = await api.registerAuthenticated(eventId);
+        displayTicket(registration);
+        showToast('Ticket successfully generated.', 'success');
     } catch (err) {
-        alert(`Registration Error: ${err.message}`);
+        if (err.status === 400) {
+            try {
+                const existingTicket = await api.fetchMyTicket(eventId, localStorage.getItem('token'));
+                displayTicket(existingTicket, true);
+                showToast('Ticket Previously Claimed. Your existing QR ticket is ready.', 'info');
+                return;
+            } catch (lookupError) {
+                if (lookupError.status === 401) return;
+            }
+        }
+        if (err.status !== 401) showToast(`Ticket request failed: ${err.message}`, 'error');
     }
 });
 
@@ -193,7 +270,7 @@ async function startCameraScanner() {
             () => {} // Silent catch for unmatched video frames
         );
     } catch (err) {
-        alert(`Camera access error: ${err.message}`);
+        showToast(`Camera access error: ${err.message}`, 'error');
     }
 }
 
@@ -210,12 +287,14 @@ async function processTicketVerification(ticketId) {
         resultBox.className = "p-4 rounded-xl text-sm font-medium bg-emerald-50 text-emerald-800 border border-emerald-200";
         resultBox.textContent = `SUCCESS: Checked In - User Validated · ${new Date().toLocaleString()}`;
         resultBox.classList.remove('hidden');
+        showToast('Ticket checked in successfully.', 'success');
     } catch (err) {
         resultBox.className = "p-4 rounded-xl text-sm font-medium bg-rose-50 text-rose-800 border border-rose-200";
         resultBox.textContent = err.message === "Ticket Already Verified / Double-Entry Blocked"
             ? "DENIED: Ticket Already Verified / Double-Entry Blocked"
             : `DENIED: ${err.message}`;
         resultBox.classList.remove('hidden');
+        if (err.status !== 401) showToast(resultBox.textContent, 'error');
     }
 }
 

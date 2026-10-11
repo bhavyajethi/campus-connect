@@ -4,8 +4,16 @@ async function apiRequest(url, options = {}) {
     const headers = new Headers(options.headers || {});
     const token = localStorage.getItem("token");
     if (token) headers.set("Authorization", `Bearer ${token}`);
+    else headers.delete("Authorization");
 
-    const response = await fetch(url, { ...options, headers });
+    let response;
+    try {
+        response = await fetch(url, { ...options, headers });
+    } catch {
+        const error = new Error("Unable to connect. Check your network or make sure the Campus Connect server is running.");
+        error.isNetworkError = true;
+        throw error;
+    }
     let data = {};
     try {
         data = await response.json();
@@ -17,10 +25,15 @@ async function apiRequest(url, options = {}) {
         localStorage.removeItem("token");
         if (typeof updateAuthUI === "function") updateAuthUI();
         if (typeof toggleAuthMode === "function") toggleAuthMode("login");
+        if (typeof showToast === "function") showToast("Session expired. Please log in again.", "error");
         if (typeof openAuthModal === "function") openAuthModal();
     }
 
-    if (!response.ok) throw new Error(data.detail || "Request failed");
+    if (!response.ok) {
+        const error = new Error(data.detail || "Request failed");
+        error.status = response.status;
+        throw error;
+    }
     return data;
 }
 
@@ -53,6 +66,11 @@ const api = {
             method: "POST",
             headers: { "Content-Type": "application/json" }
         });
+    },
+
+    async fetchMyTicket(eventId, token) {
+        const headers = token ? { "Authorization": `Bearer ${token}` } : {};
+        return apiRequest(`${API_BASE}/registrations/my-ticket/${encodeURIComponent(eventId)}`, { headers });
     },
 
     // 4. Admin Gate QR Verification APIs

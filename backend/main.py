@@ -150,6 +150,20 @@ def create_registration_authenticated(
     db.refresh(new_reg)
     return new_reg
 
+@app.get("/registrations/my-ticket/{event_id}", response_model=schemas.RegistrationResponse)
+def get_my_ticket(
+    event_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    registration = db.query(models.Registration).filter(
+        models.Registration.user_id == current_user.id,
+        models.Registration.event_id == event_id
+    ).first()
+    if not registration:
+        raise HTTPException(status_code=404, detail="No ticket found for this event")
+    return registration
+
 
 # STEP 7: Generate Live QR Code Image Endpoint
 @app.get("/registrations/{ticket_id}/qr")
