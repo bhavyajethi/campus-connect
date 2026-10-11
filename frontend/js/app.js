@@ -1,4 +1,5 @@
 let html5QrCode = null;
+let generatedTicketId = null;
 
 // --- Auth Modal & Session State Handlers ---
 function openAuthModal() {
@@ -148,7 +149,6 @@ document.getElementById('auth-signup-form').addEventListener('submit', async (e)
 document.getElementById('registration-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const eventId = document.getElementById('reg-event-select').value;
-    const token = localStorage.getItem('token');
     const resultBox = document.getElementById('ticket-result');
     const qrImg = document.getElementById('qr-image');
 
@@ -157,20 +157,21 @@ document.getElementById('registration-form').addEventListener('submit', async (e
         return;
     }
 
-    if (!token) {
-        alert("Please login first to claim tickets!");
-        openAuthModal();
-        return;
-    }
-
     try {
-        const data = await api.registerAuthenticated(eventId, token);
+        const data = await api.registerAuthenticated(eventId);
+        generatedTicketId = data.id;
         qrImg.src = api.getQrCodeUrl(data.id);
         resultBox.classList.remove('hidden');
     } catch (err) {
         alert(`Registration Error: ${err.message}`);
     }
 });
+
+async function automateGateCheckInVerification() {
+    if (!generatedTicketId) return;
+    switchTab('scanner');
+    await processTicketVerification(generatedTicketId);
+}
 
 // --- Live Camera Scanner Functions ---
 async function startCameraScanner() {
@@ -207,11 +208,13 @@ async function processTicketVerification(ticketId) {
     try {
         const data = await api.verifyTicket(ticketId);
         resultBox.className = "p-4 rounded-xl text-sm font-medium bg-emerald-50 text-emerald-800 border border-emerald-200";
-        resultBox.textContent = `SUCCESS: ${data.message} (User ID: ${data.user_id})`;
+        resultBox.textContent = `SUCCESS: Checked In - User Validated · ${new Date().toLocaleString()}`;
         resultBox.classList.remove('hidden');
     } catch (err) {
         resultBox.className = "p-4 rounded-xl text-sm font-medium bg-rose-50 text-rose-800 border border-rose-200";
-        resultBox.textContent = `DENIED: ${err.message}`;
+        resultBox.textContent = err.message === "Ticket Already Verified / Double-Entry Blocked"
+            ? "DENIED: Ticket Already Verified / Double-Entry Blocked"
+            : `DENIED: ${err.message}`;
         resultBox.classList.remove('hidden');
     }
 }

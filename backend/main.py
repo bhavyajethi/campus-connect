@@ -171,23 +171,26 @@ def get_qr_code(ticket_id: UUID):
 # STEP 8: Admin Ticket Verification (Scanner API)
 @app.post("/verifications/", response_model=schemas.VerificationResponse, status_code=status.HTTP_201_CREATED)
 def create_verification(verification: schemas.VerificationResponse, db: Session = Depends(get_db)):
-    # 1) Verify the ticket in the database
-    registration = db.query(models.Registration).filter(models.Registration.id == verification.ticket_id).first()
-    
+    return verify_registration(verification.ticket_id, db)
+
+@app.post("/registrations/{ticket_id}/verify", response_model=schemas.VerificationResponse)
+def verify_registration_by_ticket_id(ticket_id: UUID, db: Session = Depends(get_db)):
+    return verify_registration(ticket_id, db)
+
+def verify_registration(ticket_id: UUID, db: Session):
+    registration = db.query(models.Registration).filter(models.Registration.id == ticket_id).first()
     if not registration:
         raise HTTPException(status_code=404, detail="Ticket not found")
 
-    # 2. Check if the ticket has already been used
-    if registration.status == "attended":
-        raise HTTPException(status_code=400, detail="Ticket has already been used")
+    if registration.status == models.StatusEnum.attended:
+        raise HTTPException(status_code=400, detail="Ticket Already Verified / Double-Entry Blocked")
 
-    # 3) Update the registration status to "attended"
-    registration.status = "attended"
+    registration.status = models.StatusEnum.attended
     db.commit()
-    db.refresh(registration)    
+    db.refresh(registration)
 
     return {
-        "message":"Registration Successful",
+        "message":"Checked In - User Validated",
         "ticket_id":registration.id,
         "user_id":registration.user_id,
         "status":registration.status

@@ -1,58 +1,65 @@
 const API_BASE = "http://127.0.0.1:8000";
 
+async function apiRequest(url, options = {}) {
+    const headers = new Headers(options.headers || {});
+    const token = localStorage.getItem("token");
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+
+    const response = await fetch(url, { ...options, headers });
+    let data = {};
+    try {
+        data = await response.json();
+    } catch {
+        data = {};
+    }
+
+    if (response.status === 401) {
+        localStorage.removeItem("token");
+        if (typeof updateAuthUI === "function") updateAuthUI();
+        if (typeof toggleAuthMode === "function") toggleAuthMode("login");
+        if (typeof openAuthModal === "function") openAuthModal();
+    }
+
+    if (!response.ok) throw new Error(data.detail || "Request failed");
+    return data;
+}
+
 const api = {
     // 1. User Authentication APIs
     async login(email, password) {
-        const response = await fetch(`${API_BASE}/login`, {
+        return apiRequest(`${API_BASE}/login`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email, password })
         });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || "Login failed");
-        return data;
     },
 
     async signup(name, email, year, password) {
-        const response = await fetch(`${API_BASE}/users/`, {
+        return apiRequest(`${API_BASE}/users/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ name, email, year, password, role: "student" })
         });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || "Signup failed");
-        return data;
     },
 
     // 2. Event Catalog APIs
     async fetchEvents() {
-        const response = await fetch(`${API_BASE}/events/`);
-        if (!response.ok) throw new Error("Failed to fetch events");
-        return await response.json();
+        return apiRequest(`${API_BASE}/events/`);
     },
 
     // 3. Authenticated Event Registration API
-    async registerAuthenticated(eventId, token) {
-        const response = await fetch(`${API_BASE}/registrations/authenticated/?event_id=${eventId}`, {
+    async registerAuthenticated(eventId) {
+        return apiRequest(`${API_BASE}/registrations/authenticated/?event_id=${encodeURIComponent(eventId)}`, {
             method: "POST",
-            headers: { 
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${token}`
-            }
+            headers: { "Content-Type": "application/json" }
         });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || "Registration failed");
-        return data;
     },
 
     // 4. Admin Gate QR Verification APIs
     async verifyTicket(ticketId) {
-        const response = await fetch(`${API_BASE}/registrations/${ticketId}/verify`, {
+        return apiRequest(`${API_BASE}/registrations/${encodeURIComponent(ticketId)}/verify`, {
             method: "POST"
         });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || "Verification failed");
-        return data;
     },
 
     getQrCodeUrl(ticketId) {
