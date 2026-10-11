@@ -1,6 +1,6 @@
 import uuid
 import enum
-from sqlalchemy import Column, String, Integer, ForeignKey, Enum, Date
+from sqlalchemy import Boolean, Column, String, Integer, ForeignKey, Enum, Date, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from database import Base
 
@@ -37,6 +37,7 @@ class Event(Base):
 
 class Registration(Base):
     __tablename__ = "registrations"
+    __table_args__ = (UniqueConstraint("user_id", "event_id", name="uq_registration_user_event"),)
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
@@ -45,3 +46,4 @@ class Registration(Base):
     # This is the secret code that will be embedded in the QR Code!
     ticket_uuid = Column(UUID(as_uuid=True), unique=True, default=uuid.uuid4, index=True)
     status = Column(Enum(StatusEnum), default=StatusEnum.registered, nullable=False)
+    is_verified = Column(Boolean, default=False, nullable=False)

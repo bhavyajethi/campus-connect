@@ -5,6 +5,7 @@ from uuid import UUID
 import schemas
 import qrcode
 import io
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from database import get_db
 from typing import List
@@ -82,16 +83,16 @@ def create_event(event: schemas.EventCreate, db: Session = Depends(get_db)):
 
 # STEP 6: Event Listing Endpoint (GET)
 @app.get("/events/", response_model=List[schemas.EventResponse])
-def get_events(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    # Fetch a list of events from the database
-    events = (
-        db.query(models.Event)
-        .filter(models.Event.date >= date.today())
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
-    return events
+def get_events(
+    skip: int = 0,
+    limit: int = 100,
+    include_past: bool = False,
+    db: Session = Depends(get_db)
+):
+    query = db.query(models.Event)
+    if not include_past:
+        query = query.filter(models.Event.date >= date.today())
+    return query.offset(skip).limit(limit).all()
 
 @app.post("/registrations/", response_model=schemas.RegistrationResponse, status_code=status.HTTP_201_CREATED)
 def create_registration(reg: schemas.RegistrationCreate, db: Session = Depends(get_db)):
@@ -120,7 +121,11 @@ def create_registration(reg: schemas.RegistrationCreate, db: Session = Depends(g
         status="registered"
     )
     db.add(new_reg)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="User is already registered for this event") from error
     db.refresh(new_reg)
     
     return new_reg
@@ -146,7 +151,11 @@ def create_registration_authenticated(
         
     new_reg = models.Registration(user_id=current_user.id, event_id=event_id)
     db.add(new_reg)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="User already registered for this event") from error
     db.refresh(new_reg)
     return new_reg
 
@@ -161,7 +170,7 @@ def get_my_ticket(
         models.Registration.event_id == event_id
     ).first()
     if not registration:
-        raise HTTPException(status_code=404, detail="No ticket found for this event")
+        raise HTTPException(status_code=404, detail="No registration found for this event")
     return registration
 
 
@@ -184,7 +193,7 @@ def get_qr_code(ticket_id: UUID):
 
 # STEP 8: Admin Ticket Verification (Scanner API)
 @app.post("/verifications/", response_model=schemas.VerificationResponse, status_code=status.HTTP_201_CREATED)
-def create_verification(verification: schemas.VerificationResponse, db: Session = Depends(get_db)):
+def create_verification(verification: schemas.VerificationRequest, db: Session = Depends(get_db)):
     return verify_registration(verification.ticket_id, db)
 
 @app.post("/registrations/{ticket_id}/verify", response_model=schemas.VerificationResponse)
@@ -192,13 +201,16 @@ def verify_registration_by_ticket_id(ticket_id: UUID, db: Session = Depends(get_
     return verify_registration(ticket_id, db)
 
 def verify_registration(ticket_id: UUID, db: Session):
-    registration = db.query(models.Registration).filter(models.Registration.id == ticket_id).first()
+    registration = db.query(models.Registration).filter(
+        models.Registration.id == ticket_id
+    ).with_for_update().first()
     if not registration:
         raise HTTPException(status_code=404, detail="Ticket not found")
 
-    if registration.status == models.StatusEnum.attended:
-        raise HTTPException(status_code=400, detail="Ticket Already Verified / Double-Entry Blocked")
+    if registration.is_verified:
+        raise HTTPException(status_code=400, detail="Ticket already verified")
 
+    registration.is_verified = True
     registration.status = models.StatusEnum.attended
     db.commit()
     db.refresh(registration)
@@ -207,5 +219,6 @@ def verify_registration(ticket_id: UUID, db: Session):
         "message":"Checked In - User Validated",
         "ticket_id":registration.id,
         "user_id":registration.user_id,
-        "status":registration.status
+        "status":"checked_in",
+        "is_verified":registration.is_verified
     }

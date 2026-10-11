@@ -47,16 +47,21 @@ class RegistrationResponse(BaseModel):
     user_id : UUID
     event_id : UUID
     status: str
+    is_verified: bool
 
     model_config = ConfigDict(from_attributes=True)
 
-# Output Event : Verification schema for returning verification details
-# Output Schema: What the scanner sees when verifying a ticket
+# Input schema for the legacy verification route.
+class VerificationRequest(BaseModel):
+    ticket_id: UUID
+
+# Output schema for ticket check-in.
 class VerificationResponse(BaseModel):
     message: str
     ticket_id: UUID
     user_id: UUID
     status: str
+    is_verified: bool
 
     model_config = ConfigDict(from_attributes=True)
 
