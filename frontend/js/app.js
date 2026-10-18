@@ -1,5 +1,6 @@
 let html5QrCode = null;
 let generatedTicketId = null;
+let userRegistrations = [];
 
 function showToast(message, type = 'success') {
     const container = document.getElementById('toast-container');
@@ -138,7 +139,9 @@ function updateCreateEventVisibility(user = getSessionUser()) {
 function logout() {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    userRegistrations = [];
     updateAuthUI();
+    loadEvents();
     showToast('Logged out successfully.', 'info');
 }
 
@@ -178,21 +181,27 @@ function switchTab(tabName) {
 async function loadEvents() {
     const grid = document.getElementById('events-grid');
     const selectDropdown = document.getElementById('reg-event-select');
+    const token = localStorage.getItem('token');
     updateCreateEventVisibility();
+    if (!token) userRegistrations = [];
     grid.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6';
     grid.innerHTML = `<p class="text-sm text-slate-400 col-span-full text-center py-10">Loading events...</p>`;
     
     try {
         const events = await api.fetchEvents();
-        const registeredEventIds = new Set();
-        if (localStorage.getItem('token')) {
+        if (localStorage.getItem('token') !== token) return;
+        if (token && localStorage.getItem('token') === token) {
             try {
-                const registrations = await api.fetchMyRegistrations();
-                registrations.forEach((registration) => registeredEventIds.add(registration.event_id));
+                const registrations = await api.fetchMyRegistrations(token);
+                if (localStorage.getItem('token') !== token) return;
+                userRegistrations = registrations;
             } catch (error) {
+                if (localStorage.getItem('token') !== token) return;
+                userRegistrations = [];
                 if (error.status !== 401) showToast(`Unable to check your registrations: ${error.message}`, 'error');
             }
         }
+        const registeredEventIds = new Set(userRegistrations.map((registration) => registration.event_id));
         
         const selectedEventId = selectDropdown.value;
         selectDropdown.innerHTML = `<option value="" disabled selected>-- Select an Event --</option>`;
@@ -225,8 +234,8 @@ async function loadEvents() {
                 </div>
                 <div class="pt-4 border-t border-slate-100 flex items-center justify-end">
                     ${registeredEventIds.has(event.id)
-                        ? `<button onclick="prefillRegister('${event.id}')" class="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2 rounded-lg font-semibold flex items-center gap-1"><span>Registered</span> <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></button>`
-                        : `<button onclick="prefillRegister('${event.id}')" class="text-xs bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg font-medium">Select Event</button>`}
+                        ? `<button onclick="handleEventSelection('${event.id}')" class="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2 rounded-lg font-semibold flex items-center gap-1"><span>Registered</span> <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></button>`
+                        : `<button onclick="handleEventSelection('${event.id}')" class="text-xs bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg font-medium">Select Event</button>`}
                 </div>
             </div>
         `).join('');
@@ -235,6 +244,16 @@ async function loadEvents() {
         grid.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-sm text-rose-700';
         if (err.status !== 401) showToast(err.message, 'error');
     }
+}
+
+function handleEventSelection(eventId) {
+    if (!localStorage.getItem('token')) {
+        showToast('Please log in to claim tickets', 'info');
+        toggleAuthMode('login');
+        openAuthModal();
+        return;
+    }
+    return prefillRegister(eventId);
 }
 
 async function loadMyTickets() {
@@ -431,6 +450,7 @@ document.getElementById('auth-login-form').addEventListener('submit', async (e) 
         }));
         updateAuthUI();
         closeAuthModal();
+        loadEvents();
         showToast('Login successful.', 'success');
     } catch (err) {
         if (err.status !== 401) showToast(`Login failed: ${err.message}`, 'error');
@@ -456,6 +476,7 @@ document.getElementById('auth-signup-form').addEventListener('submit', async (e)
         }));
         updateAuthUI();
         closeAuthModal();
+        loadEvents();
         showToast('Account created and logged in successfully.', 'success');
     } catch (err) {
         if (err.status !== 401) showToast(`Signup failed: ${err.message}`, 'error');
