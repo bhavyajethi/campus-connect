@@ -66,6 +66,12 @@ button, input, select {
     white-space: nowrap;
 }
 
+.ticket-used-overlay.is-expired {
+    border-color: #be123c;
+    background: rgb(255 241 242 / 96%);
+    color: #be123c;
+}
+
 /* Custom styling for HTML5 QR Scanner Video Element */
 #reader video {
     object-fit: cover !important;

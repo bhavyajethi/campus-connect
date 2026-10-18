@@ -15,6 +15,17 @@ function showToast(message, type = 'success') {
     window.setTimeout(() => toast.remove(), 3000);
 }
 
+function getTicketState(ticket, eventDate) {
+    if (ticket.is_verified === true) return 'used';
+
+    const parsedEventDate = new Date(`${eventDate}T00:00:00`);
+    if (Number.isNaN(parsedEventDate.getTime())) return 'valid';
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return parsedEventDate < today ? 'expired' : 'valid';
+}
+
 // --- Auth Modal & Session State Handlers ---
 function openAuthModal() {
     document.getElementById('auth-modal').classList.remove('hidden');
@@ -184,7 +195,11 @@ async function loadEvents() {
 
         // Populate Dropdown & Event Cards Grid
         events.forEach(event => {
-            selectDropdown.innerHTML += `<option value="${event.id}">${event.name}</option>`;
+            const option = document.createElement('option');
+            option.value = event.id;
+            option.textContent = event.name;
+            option.dataset.eventDate = event.date;
+            selectDropdown.appendChild(option);
         });
         if (events.some(event => event.id === selectedEventId)) {
             selectDropdown.value = selectedEventId;
@@ -239,17 +254,21 @@ async function loadMyTickets() {
             date.className = 'mt-1 text-sm text-slate-500';
             date.textContent = new Date(`${ticket.event_date}T00:00:00`).toLocaleDateString();
             const badge = document.createElement('span');
-            badge.className = ticket.is_verified
-                ? 'mt-3 inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600'
-                : 'mt-3 inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700';
-            badge.textContent = ticket.is_verified ? 'Used' : 'Valid';
+            const ticketState = getTicketState(ticket, ticket.event_date);
+            const badgeStyles = {
+                valid: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+                used: 'bg-slate-100 text-slate-600 border border-slate-200',
+                expired: 'bg-rose-50 text-rose-700 border border-rose-200'
+            };
+            badge.className = `mt-3 inline-flex rounded-md px-2.5 py-1 text-xs font-semibold ${badgeStyles[ticketState]}`;
+            badge.textContent = ticketState[0].toUpperCase() + ticketState.slice(1);
             details.append(heading, date, badge);
 
             const viewButton = document.createElement('button');
             viewButton.type = 'button';
             viewButton.className = 'self-start rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50';
             viewButton.textContent = 'View Pass';
-            viewButton.addEventListener('click', () => viewTicketPass(ticket.event_id, ticket.event_name));
+            viewButton.addEventListener('click', () => viewTicketPass(ticket.event_id, ticket.event_name, ticket.event_date));
             card.append(details, viewButton);
             grid.appendChild(card);
         });
@@ -262,11 +281,13 @@ async function loadMyTickets() {
     }
 }
 
-async function viewTicketPass(eventId, eventName) {
+async function viewTicketPass(eventId, eventName, eventDate) {
     await switchTab('register');
     const selectDropdown = document.getElementById('reg-event-select');
     if (!Array.from(selectDropdown.options).some((option) => option.value === eventId)) {
-        selectDropdown.add(new Option(eventName, eventId));
+        const option = new Option(eventName, eventId);
+        option.dataset.eventDate = eventDate;
+        selectDropdown.add(option);
     }
     selectDropdown.value = eventId;
     await restoreSelectedEventTicket();
@@ -279,27 +300,35 @@ async function prefillRegister(eventId) {
     await restoreSelectedEventTicket();
 }
 
-function displayTicket(registration) {
+function displayTicket(registration, eventDate = null) {
     generatedTicketId = registration.id;
-    const isVerified = registration.is_verified === true;
+    const selectedOption = document.getElementById('reg-event-select').selectedOptions[0];
+    const resolvedEventDate = eventDate || selectedOption?.dataset.eventDate;
+    const ticketState = getTicketState(registration, resolvedEventDate);
+    const isVerified = ticketState === 'used';
+    const isExpired = ticketState === 'expired';
     const qrImage = document.getElementById('qr-image');
     const usedOverlay = document.getElementById('ticket-used-overlay');
     const automateButton = document.getElementById('btn-automate-verify');
-    usedOverlay.classList.toggle('hidden', !isVerified);
-    automateButton.classList.toggle('hidden', isVerified);
-    qrImage.classList.toggle('is-used', isVerified);
+    usedOverlay.classList.toggle('hidden', !isVerified && !isExpired);
+    usedOverlay.classList.toggle('is-expired', isExpired);
+    usedOverlay.textContent = isExpired ? 'EXPIRED' : 'CHECKED IN';
+    automateButton.classList.toggle('hidden', isVerified || isExpired);
+    qrImage.classList.toggle('is-used', isVerified || isExpired);
     document.getElementById('ticket-event-name').textContent =
         document.getElementById('reg-event-select').selectedOptions[0]?.textContent || 'Campus Event';
 
     qrImage.src = api.getQrCodeUrl(registration.id);
 
     const badge = document.getElementById('ticket-state-badge');
-    badge.textContent = isVerified ? '● Used at Gate' : '● Valid Ticket';
+    badge.textContent = isVerified ? '● Used at Gate' : isExpired ? '● Expired' : '● Valid Ticket';
     badge.className = isVerified
         ? 'ticket-state-badge border-slate-200 bg-slate-100 text-slate-600'
-        : 'ticket-state-badge border-emerald-200 bg-emerald-50 text-emerald-700';
+        : isExpired
+            ? 'ticket-state-badge border-rose-200 bg-rose-50 text-rose-700'
+            : 'ticket-state-badge border-emerald-200 bg-emerald-50 text-emerald-700';
     document.getElementById('ticket-result').classList.remove('hidden');
-    setTicketClaimedButton(true, false, isVerified);
+    setTicketClaimedButton(true, false, isVerified || isExpired);
 }
 
 function setTicketClaimedButton(claimed, checking = false, verified = false) {
