@@ -184,6 +184,15 @@ async function loadEvents() {
     
     try {
         const events = await api.fetchEvents();
+        const registeredEventIds = new Set();
+        if (localStorage.getItem('token')) {
+            try {
+                const registrations = await api.fetchMyRegistrations();
+                registrations.forEach((registration) => registeredEventIds.add(registration.event_id));
+            } catch (error) {
+                if (error.status !== 401) showToast(`Unable to check your registrations: ${error.message}`, 'error');
+            }
+        }
         
         const selectedEventId = selectDropdown.value;
         selectDropdown.innerHTML = `<option value="" disabled selected>-- Select an Event --</option>`;
@@ -215,7 +224,9 @@ async function loadEvents() {
                     <p class="text-sm text-slate-600 line-clamp-3">${event.description || "No description provided."}</p>
                 </div>
                 <div class="pt-4 border-t border-slate-100 flex items-center justify-end">
-                    <button onclick="prefillRegister('${event.id}')" class="text-xs bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg font-medium">Select Event</button>
+                    ${registeredEventIds.has(event.id)
+                        ? `<button onclick="prefillRegister('${event.id}')" class="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2 rounded-lg font-semibold flex items-center gap-1"><span>Registered</span> <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></button>`
+                        : `<button onclick="prefillRegister('${event.id}')" class="text-xs bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg font-medium">Select Event</button>`}
                 </div>
             </div>
         `).join('');
