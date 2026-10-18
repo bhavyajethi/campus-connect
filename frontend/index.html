@@ -25,7 +25,8 @@
                 <button onclick="switchTab('my-tickets')" id="btn-my-tickets" class="hidden px-4 py-2 text-sm font-medium rounded-lg text-slate-600 hover:bg-slate-100 transition">My Tickets</button>
                 <button onclick="switchTab('scanner')" id="btn-scanner" class="px-4 py-2 text-sm font-medium rounded-lg text-slate-600 hover:bg-slate-100 transition">Admin Scanner</button>
                 <div id="auth-nav-container" class="pl-4 border-l border-slate-200">
-                    <button onclick="openAuthModal()" id="btn-auth" class="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">Login / Register</button>
+                    <button onclick="openAuthModal()" id="btn-auth" type="button" class="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">Login / Register</button>
+                    <div id="user-menu-container" class="hidden relative"></div>
                 </div>
             </nav>
         </div>
@@ -127,24 +128,7 @@
                 </div>
                 <button id="btn-generate-ticket" type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-xl transition shadow-sm">Generate QR Ticket</button>
             </form>
-            <div id="ticket-result" class="hidden pt-6 border-t border-slate-100">
-                <article id="ticket-pass-card" class="ticket-pass-card">
-                    <header class="flex items-start justify-between gap-4 border-b border-dashed border-slate-300 px-5 py-4">
-                        <div class="min-w-0">
-                            <p class="text-[11px] font-bold uppercase text-slate-500">Campus Connect · Digital Pass</p>
-                            <h3 id="ticket-event-name" class="mt-1 break-words text-lg font-bold text-slate-900">Event</h3>
-                        </div>
-                        <span id="ticket-state-badge" class="ticket-state-badge border-emerald-200 bg-emerald-50 text-emerald-700">● Valid Ticket</span>
-                    </header>
-                    <div id="ticket-qr-area" class="ticket-qr-area">
-                        <img id="qr-image" src="" alt="Ticket QR Code" class="ticket-qr-image">
-                        <div id="ticket-used-overlay" class="ticket-used-overlay hidden">CHECKED IN</div>
-                    </div>
-                    <footer class="flex justify-center px-5 py-4">
-                        <button id="btn-automate-verify" type="button" onclick="automateGateCheckInVerification()" class="rounded-xl border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">Simulate Gate Check-In</button>
-                    </footer>
-                </article>
-            </div>
+            <div id="ticket-result" class="hidden pt-6 border-t border-slate-100"></div>
         </section>
 
         <!-- Tab 3: Admin Gate Scanner (Camera-Focused Check-In) -->
@@ -195,6 +179,25 @@
         </div>
 
     </main>
+
+    <template id="ticket-result-template">
+        <article id="ticket-pass-card" class="ticket-pass-card">
+            <header class="flex items-start justify-between gap-4 border-b border-dashed border-slate-300 px-5 py-4">
+                <div class="min-w-0">
+                    <p class="text-[11px] font-bold uppercase text-slate-500">Campus Connect · Digital Pass</p>
+                    <h3 id="ticket-event-name" class="mt-1 break-words text-lg font-bold text-slate-900">Event</h3>
+                </div>
+                <span id="ticket-state-badge" class="ticket-state-badge border-emerald-200 bg-emerald-50 text-emerald-700">● Valid Ticket</span>
+            </header>
+            <div id="ticket-qr-area" class="ticket-qr-area">
+                <img id="qr-image" src="" alt="Ticket QR Code" class="ticket-qr-image">
+                <div id="ticket-used-overlay" class="ticket-used-overlay hidden">CHECKED IN</div>
+            </div>
+            <footer class="flex justify-center px-5 py-4">
+                <button id="btn-automate-verify" type="button" onclick="automateGateCheckInVerification()" class="rounded-xl border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">Simulate Gate Check-In</button>
+            </footer>
+        </article>
+    </template>
 
     <!-- Application Script Files -->
     <script src="js/api.js"></script>

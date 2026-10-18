@@ -1,6 +1,7 @@
 let html5QrCode = null;
 let generatedTicketId = null;
 let userRegistrations = [];
+let currentTicket = null;
 
 function showToast(message, type = 'success') {
     const container = document.getElementById('toast-container');
@@ -50,23 +51,27 @@ function toggleAuthMode(mode) {
 
 function updateAuthUI() {
     const token = localStorage.getItem('token');
-    const authContainer = document.getElementById('auth-nav-container');
-    const user = getSessionUser();
-    authContainer.replaceChildren();
+    const loginButton = document.getElementById('btn-auth');
+    const userMenuContainer = document.getElementById('user-menu-container');
+    const storedUser = getSessionUser();
+    const hasSession = Boolean(token);
+    const user = hasSession
+        ? storedUser || { name: 'Campus Connect User', email: '', role: 'student' }
+        : null;
+    const myTicketsButton = document.getElementById('btn-my-tickets');
+    myTicketsButton.classList.toggle('hidden', !hasSession);
+    loginButton.classList.toggle('hidden', hasSession);
+    userMenuContainer.classList.toggle('hidden', !hasSession);
 
-    if (!token || !user) {
-        const loginButton = document.createElement('button');
-        loginButton.type = 'button';
-        loginButton.className = 'rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700';
-        loginButton.textContent = 'Login / Register';
-        loginButton.addEventListener('click', openAuthModal);
-        authContainer.appendChild(loginButton);
-        document.getElementById('btn-my-tickets').classList.add('hidden');
+    if (!hasSession) {
+        purgePrivateState();
+        userMenuContainer.replaceChildren();
         updateCreateEventVisibility(null);
+        if (!document.getElementById('tab-my-tickets').classList.contains('hidden')) {
+            switchTab('events');
+        }
         return;
     }
-
-    document.getElementById('btn-my-tickets').classList.remove('hidden');
 
     const isAdmin = user.role === 'admin';
     const initials = isAdmin ? 'A' : getInitials(user.name);
@@ -110,7 +115,7 @@ function updateAuthUI() {
         avatarButton.setAttribute('aria-expanded', String(!isOpen));
     });
     wrapper.append(avatarButton, roleLabel, menu);
-    authContainer.appendChild(wrapper);
+    userMenuContainer.replaceChildren(wrapper);
     updateCreateEventVisibility(user);
 }
 
@@ -136,13 +141,26 @@ function updateCreateEventVisibility(user = getSessionUser()) {
     if (button) button.classList.toggle('hidden', user?.role !== 'admin');
 }
 
+function purgePrivateState() {
+    userRegistrations = [];
+    currentTicket = null;
+    generatedTicketId = null;
+    document.getElementById('active-tickets-grid').replaceChildren();
+    document.getElementById('past-tickets-grid').replaceChildren();
+    const ticketResult = document.getElementById('ticket-result');
+    ticketResult.replaceChildren();
+    ticketResult.classList.add('hidden');
+    document.getElementById('reg-event-select').value = '';
+    setTicketClaimedButton(false);
+}
+
 function logout() {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    userRegistrations = [];
+    purgePrivateState();
     updateAuthUI();
-    loadEvents();
-    showToast('Logged out successfully.', 'info');
+    switchTab('events');
+    showToast('Logged out successfully.', 'success');
 }
 
 function openEventModal() {
@@ -156,14 +174,30 @@ function closeEventModal() {
 
 // --- Tab Switching Navigation ---
 function switchTab(tabName) {
-    const tabs = ['events', 'register', 'scanner', 'my-tickets'];
-    tabs.forEach(t => {
-        document.getElementById(`tab-${t}`).classList.add('hidden');
-        document.getElementById(`btn-${t}`).className = "px-4 py-2 text-sm font-medium rounded-lg text-slate-600 hover:bg-slate-100 transition";
+    const tabs = {
+        events: { section: 'tab-events', button: 'btn-events' },
+        register: { section: 'tab-register', button: 'btn-register' },
+        scanner: { section: 'tab-scanner', button: 'btn-scanner' },
+        'my-tickets': { section: 'tab-my-tickets', button: 'btn-my-tickets' }
+    };
+
+    if (!tabs[tabName]) return;
+    if (tabName === 'my-tickets' && !localStorage.getItem('token')) {
+        showToast('Please log in to view your tickets', 'info');
+        toggleAuthMode('login');
+        openAuthModal();
+        tabName = 'events';
+    }
+
+    Object.values(tabs).forEach(({ section, button }) => {
+        document.getElementById(section).classList.add('hidden');
+        document.getElementById(button).className = 'px-4 py-2 text-sm font-medium rounded-lg text-slate-600 hover:bg-slate-100 transition';
     });
 
-    document.getElementById(`tab-${tabName}`).classList.remove('hidden');
-    document.getElementById(`btn-${tabName}`).className = "px-4 py-2 text-sm font-medium rounded-lg bg-indigo-50 text-indigo-600 transition";
+    const activeTab = tabs[tabName];
+    document.getElementById(activeTab.section).classList.remove('hidden');
+    document.getElementById(activeTab.button).className = 'px-4 py-2 text-sm font-medium rounded-lg bg-indigo-50 text-indigo-600 transition';
+    updateAuthUI();
 
     if (tabName !== 'scanner') {
         stopCameraScanner();
@@ -259,7 +293,8 @@ function handleEventSelection(eventId) {
 async function loadMyTickets() {
     const activeGrid = document.getElementById('active-tickets-grid');
     const pastGrid = document.getElementById('past-tickets-grid');
-    if (!localStorage.getItem('token')) {
+    const token = localStorage.getItem('token');
+    if (!token) {
         activeGrid.innerHTML = '<p class="col-span-full text-sm text-slate-500">Log in to view your tickets.</p>';
         pastGrid.innerHTML = '<p class="col-span-full text-sm text-slate-400">Log in to view ticket history.</p>';
         return;
@@ -268,7 +303,8 @@ async function loadMyTickets() {
     activeGrid.innerHTML = '<p class="col-span-full py-4 text-sm text-slate-500">Loading active passes...</p>';
     pastGrid.innerHTML = '<p class="col-span-full py-4 text-sm text-slate-400">Loading history...</p>';
     try {
-        const tickets = await api.fetchMyRegistrations();
+        const tickets = await api.fetchMyRegistrations(token);
+        if (localStorage.getItem('token') !== token) return;
         const ticketsWithState = tickets.map((ticket) => ({
             ticket,
             state: getTicketState(ticket, ticket.event_date)
@@ -283,6 +319,7 @@ async function loadMyTickets() {
         renderTicketCards(activeGrid, activeTickets, false);
         renderTicketCards(pastGrid, pastTickets, true);
     } catch (error) {
+        if (localStorage.getItem('token') !== token) return;
         const errorMessage = document.createElement('p');
         errorMessage.className = 'col-span-full text-sm text-rose-700';
         errorMessage.textContent = `Unable to load your tickets: ${error.message}`;
@@ -353,7 +390,14 @@ async function prefillRegister(eventId) {
 }
 
 function displayTicket(registration, eventDate = null) {
+    const ticketResult = document.getElementById('ticket-result');
+    if (!document.getElementById('ticket-state-badge')) {
+        ticketResult.replaceChildren(
+            document.getElementById('ticket-result-template').content.cloneNode(true)
+        );
+    }
     generatedTicketId = registration.id;
+    currentTicket = registration;
     const selectedOption = document.getElementById('reg-event-select').selectedOptions[0];
     const resolvedEventDate = eventDate || selectedOption?.dataset.eventDate;
     const ticketState = getTicketState(registration, resolvedEventDate);
@@ -416,7 +460,7 @@ async function restoreSelectedEventTicket() {
 
     try {
         const registration = await api.fetchMyTicket(eventId, token);
-        if (document.getElementById('reg-event-select').value !== eventId) return;
+        if (localStorage.getItem('token') !== token || document.getElementById('reg-event-select').value !== eventId) return;
         displayTicket(registration);
         showToast(
             registration.is_verified === true
@@ -425,7 +469,7 @@ async function restoreSelectedEventTicket() {
             'info'
         );
     } catch (err) {
-        if (document.getElementById('reg-event-select').value !== eventId) return;
+        if (localStorage.getItem('token') !== token || document.getElementById('reg-event-select').value !== eventId) return;
         setTicketClaimedButton(false);
         if (err.status !== 404 && err.status !== 401) showToast(err.message, 'error');
     }
