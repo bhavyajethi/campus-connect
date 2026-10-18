@@ -23,6 +23,10 @@ models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
+@app.on_event("startup")
+def seed_admin_account():
+    auth.ensure_admin_account()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
@@ -45,7 +49,7 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     new_user = models.User(
         name=user.name,
         email=user.email,
-        role=user.role,
+        role=models.RoleEnum.student,
         year=user.year,
         password_hash=hashed_pwd
     )
@@ -61,11 +65,32 @@ def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
     if not user or not auth.verify_password(credentials.password, user.password_hash):
         raise HTTPException(status_code=400, detail="Invalid email or password")
         
-    access_token = auth.create_access_token(data={"sub": str(user.id)})
-    return {"access_token": access_token, "token_type": "bearer"}
+    role = user.role.value if isinstance(user.role, models.RoleEnum) else user.role
+    access_token = auth.create_access_token(data={
+        "sub": str(user.id),
+        "role": role,
+        "name": user.name,
+        "email": user.email,
+    })
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user_id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "role": role,
+    }
 
 @app.post("/events/", response_model=schemas.EventResponse, status_code=status.HTTP_201_CREATED)
-def create_event(event: schemas.EventCreate, db: Session = Depends(get_db)):
+def create_event(
+    event: schemas.EventCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    role = current_user.role.value if isinstance(current_user.role, models.RoleEnum) else current_user.role
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required to create events")
+
     # 1. Convert Pydantic schema to SQLAlchemy database model
     new_event = models.Event(
         name=event.name,

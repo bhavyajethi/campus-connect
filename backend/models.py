@@ -9,6 +9,7 @@ class RoleEnum(enum.Enum):
     organizer = "organizer"
     volunteer = "volunteer"
     student = "student"
+    admin = "admin"
 
 class StatusEnum(enum.Enum):
     registered = "registered"

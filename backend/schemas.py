@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, EmailStr
-from typing import Optional
+from typing import Literal, Optional
 from uuid import UUID
 from datetime import date
 
@@ -7,7 +7,7 @@ from datetime import date
 class UserCreate(BaseModel):
     name: str
     email: EmailStr
-    role: str = "student"
+    role: Literal["student"] = "student"
     year: Optional[int] = None
     password: str
 
@@ -69,6 +69,10 @@ class VerificationResponse(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    user_id: UUID
+    name: str
+    email: EmailStr
+    role: str
 
 class TokenData(BaseModel):
     user_id: Optional[str] = None

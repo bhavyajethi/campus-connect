@@ -39,21 +39,102 @@ function toggleAuthMode(mode) {
 function updateAuthUI() {
     const token = localStorage.getItem('token');
     const authContainer = document.getElementById('auth-nav-container');
-    if (token) {
-        authContainer.innerHTML = `
-            <button onclick="logout()" class="px-3 py-1.5 text-xs font-medium bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition">Logout</button>
-        `;
-    } else {
-        authContainer.innerHTML = `
-            <button onclick="openAuthModal()" class="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">Login / Register</button>
-        `;
+    const user = getSessionUser();
+    authContainer.replaceChildren();
+
+    if (!token || !user) {
+        const loginButton = document.createElement('button');
+        loginButton.type = 'button';
+        loginButton.className = 'rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700';
+        loginButton.textContent = 'Login / Register';
+        loginButton.addEventListener('click', openAuthModal);
+        authContainer.appendChild(loginButton);
+        updateCreateEventVisibility(null);
+        return;
     }
+
+    const isAdmin = user.role === 'admin';
+    const initials = isAdmin ? 'A' : getInitials(user.name);
+    const wrapper = document.createElement('div');
+    wrapper.className = 'relative flex items-center gap-2';
+
+    const avatarButton = document.createElement('button');
+    avatarButton.type = 'button';
+    avatarButton.className = `flex h-9 w-9 items-center justify-center rounded-full font-bold text-white shadow-sm ${isAdmin ? 'bg-indigo-600' : 'bg-slate-700'}`;
+    avatarButton.textContent = initials;
+    avatarButton.setAttribute('aria-label', 'Open account menu');
+    avatarButton.setAttribute('aria-expanded', 'false');
+
+    const roleLabel = document.createElement('span');
+    roleLabel.className = `text-[10px] font-bold ${isAdmin ? 'text-indigo-700' : 'text-slate-500'}`;
+    roleLabel.textContent = isAdmin ? 'ADMIN' : '';
+
+    const menu = document.createElement('div');
+    menu.className = 'absolute right-0 top-12 z-50 hidden w-64 rounded-lg border border-slate-200 bg-white p-4 text-left shadow-xl';
+    menu.setAttribute('role', 'menu');
+
+    const name = document.createElement('p');
+    name.className = 'truncate text-sm font-semibold text-slate-900';
+    name.textContent = user.name;
+    const email = document.createElement('p');
+    email.className = 'mt-1 truncate text-xs text-slate-500';
+    email.textContent = user.email;
+    const role = document.createElement('span');
+    role.className = 'mt-3 inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase text-slate-700';
+    role.textContent = isAdmin ? 'Admin' : 'Student';
+    const logoutButton = document.createElement('button');
+    logoutButton.type = 'button';
+    logoutButton.className = 'mt-4 w-full rounded-md border border-slate-200 px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50';
+    logoutButton.textContent = 'Logout';
+    logoutButton.addEventListener('click', logout);
+    menu.append(name, email, role, logoutButton);
+
+    avatarButton.addEventListener('click', () => {
+        const isOpen = !menu.classList.contains('hidden');
+        menu.classList.toggle('hidden', isOpen);
+        avatarButton.setAttribute('aria-expanded', String(!isOpen));
+    });
+    wrapper.append(avatarButton, roleLabel, menu);
+    authContainer.appendChild(wrapper);
+    updateCreateEventVisibility(user);
+}
+
+function getSessionUser() {
+    try {
+        const user = JSON.parse(localStorage.getItem('user') || 'null');
+        return user && typeof user.name === 'string' && typeof user.role === 'string' ? user : null;
+    } catch {
+        return null;
+    }
+}
+
+function getInitials(name) {
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return '?';
+    return parts.length === 1
+        ? parts[0].slice(0, 1).toUpperCase()
+        : `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
+
+function updateCreateEventVisibility(user = getSessionUser()) {
+    const button = document.getElementById('btn-create-event');
+    if (button) button.classList.toggle('hidden', user?.role !== 'admin');
 }
 
 function logout() {
     localStorage.removeItem('token');
+    localStorage.removeItem('user');
     updateAuthUI();
     showToast('Logged out successfully.', 'info');
+}
+
+function openEventModal() {
+    if (getSessionUser()?.role !== 'admin') return;
+    document.getElementById('event-modal').classList.remove('hidden');
+}
+
+function closeEventModal() {
+    document.getElementById('event-modal').classList.add('hidden');
 }
 
 // --- Tab Switching Navigation ---
@@ -80,6 +161,7 @@ function switchTab(tabName) {
 async function loadEvents() {
     const grid = document.getElementById('events-grid');
     const selectDropdown = document.getElementById('reg-event-select');
+    updateCreateEventVisibility();
     grid.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6';
     grid.innerHTML = `<p class="text-sm text-slate-400 col-span-full text-center py-10">Loading events...</p>`;
     
@@ -207,6 +289,12 @@ document.getElementById('auth-login-form').addEventListener('submit', async (e) 
     try {
         const data = await api.login(email, password);
         localStorage.setItem('token', data.access_token);
+        localStorage.setItem('user', JSON.stringify({
+            id: data.user_id,
+            name: data.name,
+            email: data.email,
+            role: data.role
+        }));
         updateAuthUI();
         closeAuthModal();
         showToast('Login successful.', 'success');
@@ -226,11 +314,43 @@ document.getElementById('auth-signup-form').addEventListener('submit', async (e)
         await api.signup(name, email, year, password);
         const data = await api.login(email, password);
         localStorage.setItem('token', data.access_token);
+        localStorage.setItem('user', JSON.stringify({
+            id: data.user_id,
+            name: data.name,
+            email: data.email,
+            role: data.role
+        }));
         updateAuthUI();
         closeAuthModal();
         showToast('Account created and logged in successfully.', 'success');
     } catch (err) {
         if (err.status !== 401) showToast(`Signup failed: ${err.message}`, 'error');
+    }
+});
+
+document.getElementById('event-create-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const user = getSessionUser();
+    const token = localStorage.getItem('token');
+    if (user?.role !== 'admin' || !token) {
+        showToast('Admin access is required to create events.', 'error');
+        return;
+    }
+
+    const eventData = {
+        name: document.getElementById('event-name').value.trim(),
+        description: document.getElementById('event-description').value.trim() || null,
+        date: document.getElementById('event-date').value
+    };
+
+    try {
+        await api.createEvent(eventData, token);
+        document.getElementById('event-create-form').reset();
+        closeEventModal();
+        showToast('Event created successfully.', 'success');
+        await loadEvents();
+    } catch (error) {
+        showToast(`Unable to create event: ${error.message}`, 'error');
     }
 });
 

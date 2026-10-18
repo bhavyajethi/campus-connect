@@ -23,6 +23,7 @@ async function apiRequest(url, options = {}) {
 
     if (response.status === 401) {
         localStorage.removeItem("token");
+        localStorage.removeItem("user");
         if (typeof updateAuthUI === "function") updateAuthUI();
         if (typeof toggleAuthMode === "function") toggleAuthMode("login");
         if (typeof showToast === "function") showToast("Session expired. Please log in again.", "error");
@@ -58,6 +59,17 @@ const api = {
     // 2. Event Catalog APIs
     async fetchEvents() {
         return apiRequest(`${API_BASE}/events/`);
+    },
+
+    async createEvent(eventData, token) {
+        return apiRequest(`${API_BASE}/events/`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`
+            },
+            body: JSON.stringify(eventData)
+        });
     },
 
     // 3. Authenticated Event Registration API
