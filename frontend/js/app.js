@@ -12,7 +12,7 @@ function showToast(message, type = 'success') {
     toast.className = `rounded-lg border px-4 py-3 text-sm font-semibold shadow-lg ${styles[type] || styles.info}`;
     toast.textContent = message;
     container.appendChild(toast);
-    window.setTimeout(() => toast.remove(), 5000);
+    window.setTimeout(() => toast.remove(), 3000);
 }
 
 // --- Auth Modal & Session State Handlers ---
@@ -130,31 +130,25 @@ async function prefillRegister(eventId) {
     await restoreSelectedEventTicket();
 }
 
-function displayTicket(registration, previouslyClaimed = false) {
+function displayTicket(registration) {
     generatedTicketId = registration.id;
     const isVerified = registration.is_verified === true;
-    const qrContainer = document.getElementById('ticket-qr-container');
+    const qrImage = document.getElementById('qr-image');
     const usedOverlay = document.getElementById('ticket-used-overlay');
     const automateButton = document.getElementById('btn-automate-verify');
-    qrContainer.classList.toggle('hidden', isVerified);
     usedOverlay.classList.toggle('hidden', !isVerified);
     automateButton.classList.toggle('hidden', isVerified);
+    qrImage.classList.toggle('is-used', isVerified);
+    document.getElementById('ticket-event-name').textContent =
+        document.getElementById('reg-event-select').selectedOptions[0]?.textContent || 'Campus Event';
 
-    if (!isVerified) {
-        document.getElementById('qr-image').src = api.getQrCodeUrl(registration.id);
-    }
+    qrImage.src = api.getQrCodeUrl(registration.id);
 
-    const status = document.getElementById('ticket-status');
-    if (isVerified) {
-        status.textContent = 'Ticket Already Verified & Checked-In at Gate.';
-        status.className = 'p-3 bg-rose-100 text-rose-950 rounded-xl text-sm font-semibold border border-rose-300';
-    } else if (previouslyClaimed) {
-        status.textContent = 'Ticket Previously Claimed. Show this digital QR code at the gate.';
-        status.className = 'p-3 bg-amber-100 text-amber-950 rounded-xl text-sm font-semibold border border-amber-300';
-    } else {
-        status.textContent = 'Ticket Successfully Generated!';
-        status.className = 'p-3 bg-emerald-50 text-emerald-800 rounded-xl text-sm font-semibold border border-emerald-200';
-    }
+    const badge = document.getElementById('ticket-state-badge');
+    badge.textContent = isVerified ? '● Used at Gate' : '● Valid Ticket';
+    badge.className = isVerified
+        ? 'ticket-state-badge border-slate-200 bg-slate-100 text-slate-600'
+        : 'ticket-state-badge border-emerald-200 bg-emerald-50 text-emerald-700';
     document.getElementById('ticket-result').classList.remove('hidden');
     setTicketClaimedButton(true, false, isVerified);
 }
@@ -162,6 +156,7 @@ function displayTicket(registration, previouslyClaimed = false) {
 function setTicketClaimedButton(claimed, checking = false, verified = false) {
     const button = document.getElementById('btn-generate-ticket');
     button.disabled = claimed || checking;
+    button.classList.toggle('hidden', claimed || verified);
     button.textContent = verified
         ? 'Ticket Used / Checked In'
         : claimed
@@ -192,7 +187,7 @@ async function restoreSelectedEventTicket() {
     try {
         const registration = await api.fetchMyTicket(eventId, token);
         if (document.getElementById('reg-event-select').value !== eventId) return;
-        displayTicket(registration, true);
+        displayTicket(registration);
         showToast('Ticket Previously Claimed. Your existing QR ticket is ready.', 'info');
     } catch (err) {
         if (document.getElementById('reg-event-select').value !== eventId) return;
@@ -263,7 +258,7 @@ document.getElementById('registration-form').addEventListener('submit', async (e
             throw error;
         });
         if (existingTicket) {
-            displayTicket(existingTicket, true);
+            displayTicket(existingTicket);
             showToast('Ticket Previously Claimed. Your existing QR ticket is ready.', 'info');
             return;
         }
@@ -276,7 +271,7 @@ document.getElementById('registration-form').addEventListener('submit', async (e
         if (err.status === 400) {
             try {
                 const existingTicket = await api.fetchMyTicket(eventId, localStorage.getItem('token'));
-                displayTicket(existingTicket, true);
+                displayTicket(existingTicket);
                 showToast('Ticket Previously Claimed. Your existing QR ticket is ready.', 'info');
                 return;
             } catch (lookupError) {
@@ -291,13 +286,13 @@ async function automateGateCheckInVerification() {
     if (!generatedTicketId) return;
     const ticketId = generatedTicketId;
     const eventId = document.getElementById('reg-event-select').value;
-    await processTicketVerification(ticketId);
-    if (!eventId) return;
+    const verified = await processTicketVerification(ticketId);
+    if (!verified || !eventId) return;
 
     try {
         const registration = await api.fetchMyTicket(eventId, localStorage.getItem('token'));
         if (document.getElementById('reg-event-select').value === eventId) {
-            displayTicket(registration, true);
+            displayTicket(registration);
         }
     } catch (err) {
         if (err.status !== 401) showToast(`Unable to refresh ticket status: ${err.message}`, 'error');
@@ -342,6 +337,7 @@ async function processTicketVerification(ticketId) {
         resultBox.textContent = `SUCCESS: Checked In - User Validated · ${new Date().toLocaleString()}`;
         resultBox.classList.remove('hidden');
         showToast('Ticket checked in successfully.', 'success');
+        return true;
     } catch (err) {
         resultBox.className = "p-4 rounded-xl text-sm font-medium bg-rose-50 text-rose-800 border border-rose-200";
         resultBox.textContent = err.message === "Ticket Already Verified / Double-Entry Blocked"
@@ -349,6 +345,7 @@ async function processTicketVerification(ticketId) {
             : `DENIED: ${err.message}`;
         resultBox.classList.remove('hidden');
         if (err.status !== 401) showToast(resultBox.textContent, 'error');
+        return false;
     }
 }
 
