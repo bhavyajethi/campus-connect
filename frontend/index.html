@@ -102,7 +102,14 @@
                 </div>
                 <button type="button" onclick="loadMyTickets()" class="text-sm font-medium text-indigo-700 hover:underline">Refresh</button>
             </div>
-            <div id="my-tickets-grid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"></div>
+            <div>
+                <h3 class="text-lg font-bold text-slate-900 mb-4">Active Passes</h3>
+                <div id="active-tickets-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+            </div>
+            <div>
+                <h3 class="text-lg font-bold text-slate-900 mb-4 mt-10">History</h3>
+                <div id="past-tickets-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 opacity-75"></div>
+            </div>
         </section>
 
         <!-- Tab 2: Register & Ticket View (Zero Manual ID Entry) -->

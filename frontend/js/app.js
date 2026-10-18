@@ -227,58 +227,80 @@ async function loadEvents() {
 }
 
 async function loadMyTickets() {
-    const grid = document.getElementById('my-tickets-grid');
+    const activeGrid = document.getElementById('active-tickets-grid');
+    const pastGrid = document.getElementById('past-tickets-grid');
     if (!localStorage.getItem('token')) {
-        grid.innerHTML = '<p class="col-span-full rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-600">Log in to view your tickets.</p>';
+        activeGrid.innerHTML = '<p class="col-span-full text-sm text-slate-500">Log in to view your tickets.</p>';
+        pastGrid.innerHTML = '<p class="col-span-full text-sm text-slate-400">Log in to view ticket history.</p>';
         return;
     }
 
-    grid.innerHTML = '<p class="col-span-full py-8 text-center text-sm text-slate-500">Loading your tickets...</p>';
+    activeGrid.innerHTML = '<p class="col-span-full py-4 text-sm text-slate-500">Loading active passes...</p>';
+    pastGrid.innerHTML = '<p class="col-span-full py-4 text-sm text-slate-400">Loading history...</p>';
     try {
         const tickets = await api.fetchMyRegistrations();
-        if (tickets.length === 0) {
-            grid.innerHTML = '<p class="col-span-full rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-600">You have not registered for any events yet.</p>';
-            return;
-        }
+        const ticketsWithState = tickets.map((ticket) => ({
+            ticket,
+            state: getTicketState(ticket, ticket.event_date)
+        }));
+        const activeTickets = ticketsWithState
+            .filter(({ state }) => state === 'valid')
+            .map(({ ticket }) => ticket);
+        const pastTickets = ticketsWithState
+            .filter(({ state }) => state === 'used' || state === 'expired')
+            .map(({ ticket }) => ticket);
 
-        grid.replaceChildren();
-        tickets.forEach((ticket) => {
-            const card = document.createElement('article');
-            card.className = 'flex flex-col justify-between gap-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm';
-
-            const details = document.createElement('div');
-            const heading = document.createElement('h2');
-            heading.className = 'font-semibold text-slate-900';
-            heading.textContent = ticket.event_name;
-            const date = document.createElement('p');
-            date.className = 'mt-1 text-sm text-slate-500';
-            date.textContent = new Date(`${ticket.event_date}T00:00:00`).toLocaleDateString();
-            const badge = document.createElement('span');
-            const ticketState = getTicketState(ticket, ticket.event_date);
-            const badgeStyles = {
-                valid: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-                used: 'bg-slate-100 text-slate-600 border border-slate-200',
-                expired: 'bg-rose-50 text-rose-700 border border-rose-200'
-            };
-            badge.className = `mt-3 inline-flex rounded-md px-2.5 py-1 text-xs font-semibold ${badgeStyles[ticketState]}`;
-            badge.textContent = ticketState[0].toUpperCase() + ticketState.slice(1);
-            details.append(heading, date, badge);
-
-            const viewButton = document.createElement('button');
-            viewButton.type = 'button';
-            viewButton.className = 'self-start rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50';
-            viewButton.textContent = 'View Pass';
-            viewButton.addEventListener('click', () => viewTicketPass(ticket.event_id, ticket.event_name, ticket.event_date));
-            card.append(details, viewButton);
-            grid.appendChild(card);
-        });
+        renderTicketCards(activeGrid, activeTickets, false);
+        renderTicketCards(pastGrid, pastTickets, true);
     } catch (error) {
-        grid.innerHTML = '';
         const errorMessage = document.createElement('p');
-        errorMessage.className = 'col-span-full rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800';
+        errorMessage.className = 'col-span-full text-sm text-rose-700';
         errorMessage.textContent = `Unable to load your tickets: ${error.message}`;
-        grid.appendChild(errorMessage);
+        activeGrid.replaceChildren(errorMessage.cloneNode(true));
+        pastGrid.replaceChildren(errorMessage);
     }
+}
+
+function renderTicketCards(grid, tickets, isHistory) {
+    if (tickets.length === 0) {
+        const emptyMessage = document.createElement('p');
+        emptyMessage.className = 'col-span-full text-sm text-slate-400';
+        emptyMessage.textContent = isHistory ? 'No ticket history yet.' : 'No active passes found.';
+        grid.replaceChildren(emptyMessage);
+        return;
+    }
+
+    const badgeStyles = {
+        valid: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+        used: 'bg-slate-100 text-slate-600 border border-slate-200',
+        expired: 'bg-rose-50 text-rose-700 border border-rose-200'
+    };
+    const cards = tickets.map((ticket) => {
+        const state = getTicketState(ticket, ticket.event_date);
+        const card = document.createElement('article');
+        card.className = `flex flex-col justify-between gap-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm ${isHistory ? 'opacity-80' : ''}`;
+
+        const details = document.createElement('div');
+        const heading = document.createElement('h2');
+        heading.className = isHistory ? 'font-semibold text-slate-700' : 'font-semibold text-slate-900';
+        heading.textContent = ticket.event_name;
+        const date = document.createElement('p');
+        date.className = 'mt-1 text-sm text-slate-500';
+        date.textContent = new Date(`${ticket.event_date}T00:00:00`).toLocaleDateString();
+        const badge = document.createElement('span');
+        badge.className = `mt-3 inline-flex rounded-md px-2.5 py-1 text-xs font-semibold ${badgeStyles[state]}`;
+        badge.textContent = state[0].toUpperCase() + state.slice(1);
+        details.append(heading, date, badge);
+
+        const viewButton = document.createElement('button');
+        viewButton.type = 'button';
+        viewButton.className = 'self-start rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50';
+        viewButton.textContent = 'View Pass';
+        viewButton.addEventListener('click', () => viewTicketPass(ticket.event_id, ticket.event_name, ticket.event_date));
+        card.append(details, viewButton);
+        return card;
+    });
+    grid.replaceChildren(...cards);
 }
 
 async function viewTicketPass(eventId, eventName, eventDate) {
