@@ -92,7 +92,7 @@ def get_events(
     query = db.query(models.Event)
     if not include_past:
         query = query.filter(models.Event.date >= date.today())
-    return query.offset(skip).limit(limit).all()
+    return query.order_by(models.Event.date.asc()).offset(skip).limit(limit).all()
 
 @app.post("/registrations/", response_model=schemas.RegistrationResponse, status_code=status.HTTP_201_CREATED)
 def create_registration(reg: schemas.RegistrationCreate, db: Session = Depends(get_db)):

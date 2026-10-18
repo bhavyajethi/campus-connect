@@ -96,7 +96,7 @@ async function loadEvents() {
 
         // Populate Dropdown & Event Cards Grid
         events.forEach(event => {
-            selectDropdown.innerHTML += `<option value="${event.id}">${event.name} (${event.date})</option>`;
+            selectDropdown.innerHTML += `<option value="${event.id}">${event.name}</option>`;
         });
         if (events.some(event => event.id === selectedEventId)) {
             selectDropdown.value = selectedEventId;
@@ -132,13 +132,49 @@ async function prefillRegister(eventId) {
 
 function displayTicket(registration, previouslyClaimed = false) {
     generatedTicketId = registration.id;
-    document.getElementById('qr-image').src = api.getQrCodeUrl(registration.id);
+    const isVerified = registration.is_verified === true;
+    const qrContainer = document.getElementById('ticket-qr-container');
+    const usedOverlay = document.getElementById('ticket-used-overlay');
+    const automateButton = document.getElementById('btn-automate-verify');
+    qrContainer.classList.toggle('hidden', isVerified);
+    usedOverlay.classList.toggle('hidden', !isVerified);
+    automateButton.classList.toggle('hidden', isVerified);
+
+    if (!isVerified) {
+        document.getElementById('qr-image').src = api.getQrCodeUrl(registration.id);
+    }
+
     const status = document.getElementById('ticket-status');
-    status.textContent = previouslyClaimed ? 'Ticket Previously Claimed' : 'Ticket Successfully Generated!';
-    status.className = previouslyClaimed
-        ? 'p-3 bg-amber-100 text-amber-950 rounded-xl text-sm font-semibold border border-amber-300'
-        : 'p-3 bg-emerald-50 text-emerald-800 rounded-xl text-sm font-semibold border border-emerald-200';
+    if (isVerified) {
+        status.textContent = 'Ticket Already Verified & Checked-In at Gate.';
+        status.className = 'p-3 bg-rose-100 text-rose-950 rounded-xl text-sm font-semibold border border-rose-300';
+    } else if (previouslyClaimed) {
+        status.textContent = 'Ticket Previously Claimed. Show this digital QR code at the gate.';
+        status.className = 'p-3 bg-amber-100 text-amber-950 rounded-xl text-sm font-semibold border border-amber-300';
+    } else {
+        status.textContent = 'Ticket Successfully Generated!';
+        status.className = 'p-3 bg-emerald-50 text-emerald-800 rounded-xl text-sm font-semibold border border-emerald-200';
+    }
     document.getElementById('ticket-result').classList.remove('hidden');
+    setTicketClaimedButton(true, false, isVerified);
+}
+
+function setTicketClaimedButton(claimed, checking = false, verified = false) {
+    const button = document.getElementById('btn-generate-ticket');
+    button.disabled = claimed || checking;
+    button.textContent = verified
+        ? 'Ticket Used / Checked In'
+        : claimed
+        ? 'Ticket Already Claimed'
+        : checking
+            ? 'Checking Ticket...'
+            : 'Generate QR Ticket';
+    button.classList.toggle('opacity-50', button.disabled);
+    button.classList.toggle('cursor-not-allowed', button.disabled);
+    button.classList.toggle('bg-rose-700', verified);
+    button.classList.toggle('hover:bg-rose-800', verified);
+    button.classList.toggle('bg-indigo-600', !verified);
+    button.classList.toggle('hover:bg-indigo-700', !verified);
 }
 
 async function restoreSelectedEventTicket() {
@@ -147,7 +183,11 @@ async function restoreSelectedEventTicket() {
     const resultBox = document.getElementById('ticket-result');
     generatedTicketId = null;
     resultBox.classList.add('hidden');
-    if (!eventId || !token) return;
+    setTicketClaimedButton(false, Boolean(eventId && token));
+    if (!eventId || !token) {
+        setTicketClaimedButton(false);
+        return;
+    }
 
     try {
         const registration = await api.fetchMyTicket(eventId, token);
@@ -155,6 +195,8 @@ async function restoreSelectedEventTicket() {
         displayTicket(registration, true);
         showToast('Ticket Previously Claimed. Your existing QR ticket is ready.', 'info');
     } catch (err) {
+        if (document.getElementById('reg-event-select').value !== eventId) return;
+        setTicketClaimedButton(false);
         if (err.status !== 404 && err.status !== 401) showToast(err.message, 'error');
     }
 }
@@ -226,6 +268,7 @@ document.getElementById('registration-form').addEventListener('submit', async (e
             return;
         }
 
+        setTicketClaimedButton(false);
         const registration = await api.registerAuthenticated(eventId);
         displayTicket(registration);
         showToast('Ticket successfully generated.', 'success');
@@ -246,8 +289,19 @@ document.getElementById('registration-form').addEventListener('submit', async (e
 
 async function automateGateCheckInVerification() {
     if (!generatedTicketId) return;
-    switchTab('scanner');
-    await processTicketVerification(generatedTicketId);
+    const ticketId = generatedTicketId;
+    const eventId = document.getElementById('reg-event-select').value;
+    await processTicketVerification(ticketId);
+    if (!eventId) return;
+
+    try {
+        const registration = await api.fetchMyTicket(eventId, localStorage.getItem('token'));
+        if (document.getElementById('reg-event-select').value === eventId) {
+            displayTicket(registration, true);
+        }
+    } catch (err) {
+        if (err.status !== 401) showToast(`Unable to refresh ticket status: ${err.message}`, 'error');
+    }
 }
 
 // --- Live Camera Scanner Functions ---

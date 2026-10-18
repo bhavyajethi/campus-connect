@@ -103,15 +103,16 @@
                         <option value="" disabled selected>-- Select an Event --</option>
                     </select>
                 </div>
-                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-xl transition shadow-sm">Generate QR Ticket</button>
+                <button id="btn-generate-ticket" type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-xl transition shadow-sm">Generate QR Ticket</button>
             </form>
             <div id="ticket-result" class="hidden pt-6 border-t border-slate-100 text-center space-y-4">
                 <div id="ticket-status" class="p-3 bg-emerald-50 text-emerald-800 rounded-xl text-sm font-semibold">Ticket Successfully Generated!</div>
-                <div>
+                <div id="ticket-qr-container">
                     <p class="text-xs text-slate-500 mb-2">Show this digital QR code at the event gate:</p>
                     <img id="qr-image" src="" alt="Ticket QR Code" class="mx-auto w-48 h-48 border border-slate-200 rounded-xl p-2 bg-white shadow-sm">
                 </div>
-                <button id="btn-automate-check-in" type="button" onclick="automateGateCheckInVerification()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-xl transition shadow-sm">Automate Gate Check-In Verification</button>
+                <div id="ticket-used-overlay" class="hidden rounded-lg border border-rose-300 bg-rose-50 px-4 py-8 text-rose-800 font-bold tracking-wide">EXPIRED / USED</div>
+                <button id="btn-automate-verify" type="button" onclick="automateGateCheckInVerification()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-xl transition shadow-sm">Automate Gate Check-In Verification</button>
             </div>
         </section>
 
