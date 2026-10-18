@@ -198,6 +198,31 @@ def get_my_ticket(
         raise HTTPException(status_code=404, detail="No registration found for this event")
     return registration
 
+@app.get("/registrations/me", response_model=List[schemas.RegistrationWithEvent])
+def get_my_registrations(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    registrations = (
+        db.query(models.Registration, models.Event)
+        .join(models.Event, models.Registration.event_id == models.Event.id)
+        .filter(models.Registration.user_id == current_user.id)
+        .order_by(models.Event.date.desc(), models.Registration.id.desc())
+        .all()
+    )
+    return [
+        {
+            "id": registration.id,
+            "user_id": registration.user_id,
+            "event_id": registration.event_id,
+            "status": registration.status.value,
+            "is_verified": registration.is_verified,
+            "event_name": event.name,
+            "event_date": event.date,
+        }
+        for registration, event in registrations
+    ]
+
 
 # STEP 7: Generate Live QR Code Image Endpoint
 @app.get("/registrations/{ticket_id}/qr")

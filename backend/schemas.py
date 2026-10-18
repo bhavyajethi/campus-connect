@@ -51,6 +51,10 @@ class RegistrationResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class RegistrationWithEvent(RegistrationResponse):
+    event_name: str
+    event_date: date
+
 # Input schema for the legacy verification route.
 class VerificationRequest(BaseModel):
     ticket_id: UUID

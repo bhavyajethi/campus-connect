@@ -49,9 +49,12 @@ function updateAuthUI() {
         loginButton.textContent = 'Login / Register';
         loginButton.addEventListener('click', openAuthModal);
         authContainer.appendChild(loginButton);
+        document.getElementById('btn-my-tickets').classList.add('hidden');
         updateCreateEventVisibility(null);
         return;
     }
+
+    document.getElementById('btn-my-tickets').classList.remove('hidden');
 
     const isAdmin = user.role === 'admin';
     const initials = isAdmin ? 'A' : getInitials(user.name);
@@ -139,7 +142,7 @@ function closeEventModal() {
 
 // --- Tab Switching Navigation ---
 function switchTab(tabName) {
-    const tabs = ['events', 'register', 'scanner'];
+    const tabs = ['events', 'register', 'scanner', 'my-tickets'];
     tabs.forEach(t => {
         document.getElementById(`tab-${t}`).classList.add('hidden');
         document.getElementById(`btn-${t}`).className = "px-4 py-2 text-sm font-medium rounded-lg text-slate-600 hover:bg-slate-100 transition";
@@ -154,6 +157,9 @@ function switchTab(tabName) {
     
     if (tabName === 'events' || tabName === 'register') {
         return loadEvents();
+    }
+    if (tabName === 'my-tickets') {
+        return loadMyTickets();
     }
 }
 
@@ -203,6 +209,67 @@ async function loadEvents() {
         grid.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-sm text-rose-700';
         if (err.status !== 401) showToast(err.message, 'error');
     }
+}
+
+async function loadMyTickets() {
+    const grid = document.getElementById('my-tickets-grid');
+    if (!localStorage.getItem('token')) {
+        grid.innerHTML = '<p class="col-span-full rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-600">Log in to view your tickets.</p>';
+        return;
+    }
+
+    grid.innerHTML = '<p class="col-span-full py-8 text-center text-sm text-slate-500">Loading your tickets...</p>';
+    try {
+        const tickets = await api.fetchMyRegistrations();
+        if (tickets.length === 0) {
+            grid.innerHTML = '<p class="col-span-full rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-600">You have not registered for any events yet.</p>';
+            return;
+        }
+
+        grid.replaceChildren();
+        tickets.forEach((ticket) => {
+            const card = document.createElement('article');
+            card.className = 'flex flex-col justify-between gap-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm';
+
+            const details = document.createElement('div');
+            const heading = document.createElement('h2');
+            heading.className = 'font-semibold text-slate-900';
+            heading.textContent = ticket.event_name;
+            const date = document.createElement('p');
+            date.className = 'mt-1 text-sm text-slate-500';
+            date.textContent = new Date(`${ticket.event_date}T00:00:00`).toLocaleDateString();
+            const badge = document.createElement('span');
+            badge.className = ticket.is_verified
+                ? 'mt-3 inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600'
+                : 'mt-3 inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700';
+            badge.textContent = ticket.is_verified ? 'Used' : 'Valid';
+            details.append(heading, date, badge);
+
+            const viewButton = document.createElement('button');
+            viewButton.type = 'button';
+            viewButton.className = 'self-start rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50';
+            viewButton.textContent = 'View Pass';
+            viewButton.addEventListener('click', () => viewTicketPass(ticket.event_id, ticket.event_name));
+            card.append(details, viewButton);
+            grid.appendChild(card);
+        });
+    } catch (error) {
+        grid.innerHTML = '';
+        const errorMessage = document.createElement('p');
+        errorMessage.className = 'col-span-full rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800';
+        errorMessage.textContent = `Unable to load your tickets: ${error.message}`;
+        grid.appendChild(errorMessage);
+    }
+}
+
+async function viewTicketPass(eventId, eventName) {
+    await switchTab('register');
+    const selectDropdown = document.getElementById('reg-event-select');
+    if (!Array.from(selectDropdown.options).some((option) => option.value === eventId)) {
+        selectDropdown.add(new Option(eventName, eventId));
+    }
+    selectDropdown.value = eventId;
+    await restoreSelectedEventTicket();
 }
 
 async function prefillRegister(eventId) {
@@ -270,7 +337,12 @@ async function restoreSelectedEventTicket() {
         const registration = await api.fetchMyTicket(eventId, token);
         if (document.getElementById('reg-event-select').value !== eventId) return;
         displayTicket(registration);
-        showToast('Ticket Previously Claimed. Your existing QR ticket is ready.', 'info');
+        showToast(
+            registration.is_verified === true
+                ? 'This ticket has already been used and checked in at the gate.'
+                : 'Ticket Previously Claimed. Your digital pass is ready.',
+            'info'
+        );
     } catch (err) {
         if (document.getElementById('reg-event-select').value !== eventId) return;
         setTicketClaimedButton(false);
@@ -379,7 +451,12 @@ document.getElementById('registration-form').addEventListener('submit', async (e
         });
         if (existingTicket) {
             displayTicket(existingTicket);
-            showToast('Ticket Previously Claimed. Your existing QR ticket is ready.', 'info');
+            showToast(
+                existingTicket.is_verified === true
+                    ? 'This ticket has already been used and checked in at the gate.'
+                    : 'Ticket Previously Claimed. Your digital pass is ready.',
+                'info'
+            );
             return;
         }
 
@@ -392,7 +469,12 @@ document.getElementById('registration-form').addEventListener('submit', async (e
             try {
                 const existingTicket = await api.fetchMyTicket(eventId, localStorage.getItem('token'));
                 displayTicket(existingTicket);
-                showToast('Ticket Previously Claimed. Your existing QR ticket is ready.', 'info');
+                showToast(
+                    existingTicket.is_verified === true
+                        ? 'This ticket has already been used and checked in at the gate.'
+                        : 'Ticket Previously Claimed. Your digital pass is ready.',
+                    'info'
+                );
                 return;
             } catch (lookupError) {
                 if (lookupError.status === 401) return;

@@ -22,6 +22,7 @@
             <nav class="flex items-center space-x-2">
                 <button onclick="switchTab('events')" id="btn-events" class="px-4 py-2 text-sm font-medium rounded-lg bg-indigo-50 text-indigo-600 transition">Events</button>
                 <button onclick="switchTab('register')" id="btn-register" class="px-4 py-2 text-sm font-medium rounded-lg text-slate-600 hover:bg-slate-100 transition">Get Ticket</button>
+                <button onclick="switchTab('my-tickets')" id="btn-my-tickets" class="hidden px-4 py-2 text-sm font-medium rounded-lg text-slate-600 hover:bg-slate-100 transition">My Tickets</button>
                 <button onclick="switchTab('scanner')" id="btn-scanner" class="px-4 py-2 text-sm font-medium rounded-lg text-slate-600 hover:bg-slate-100 transition">Admin Scanner</button>
                 <div id="auth-nav-container" class="pl-4 border-l border-slate-200">
                     <button onclick="openAuthModal()" id="btn-auth" class="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">Login / Register</button>
@@ -91,6 +92,17 @@
                 </div>
             </div>
             <div id="events-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        </section>
+
+        <section id="tab-my-tickets" class="hidden max-w-6xl mx-auto p-6 space-y-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-slate-900">My Tickets</h1>
+                    <p class="mt-1 text-sm text-slate-500">Your campus event registration history.</p>
+                </div>
+                <button type="button" onclick="loadMyTickets()" class="text-sm font-medium text-indigo-700 hover:underline">Refresh</button>
+            </div>
+            <div id="my-tickets-grid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"></div>
         </section>
 
         <!-- Tab 2: Register & Ticket View (Zero Manual ID Entry) -->

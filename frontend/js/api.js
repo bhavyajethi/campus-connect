@@ -85,6 +85,10 @@ const api = {
         return apiRequest(`${API_BASE}/registrations/my-ticket/${encodeURIComponent(eventId)}`, { headers });
     },
 
+    async fetchMyRegistrations() {
+        return apiRequest(`${API_BASE}/registrations/me`);
+    },
+
     // 4. Admin Gate QR Verification APIs
     async verifyTicket(ticketId) {
         return apiRequest(`${API_BASE}/registrations/${encodeURIComponent(ticketId)}/verify`, {
