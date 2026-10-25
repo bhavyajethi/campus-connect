@@ -4,16 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Campus Connect | Portal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- HTML5 QR Code Scanner Library -->
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <link rel="stylesheet" href="css/styles.css">
 </head>
-<body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col">
+<body class="campus-app bg-slate-50 text-slate-800 min-h-screen flex flex-col">
 
     <!-- Navigation Header -->
-    <header class="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
+    <header class="sticky top-0 z-50 border-b border-slate-200/80 bg-white/80 backdrop-blur-md">
         <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
             <div class="flex items-center space-x-3 cursor-pointer" onclick="switchTab('events')">
                 <div class="bg-indigo-600 text-white font-bold p-2 rounded-xl">CC</div>
@@ -24,6 +27,7 @@
                 <button onclick="switchTab('register')" id="btn-register" class="px-4 py-2 text-sm font-medium rounded-lg text-slate-600 hover:bg-slate-100 transition">Get Ticket</button>
                 <button onclick="switchTab('my-tickets')" id="btn-my-tickets" class="hidden px-4 py-2 text-sm font-medium rounded-lg text-slate-600 hover:bg-slate-100 transition">My Tickets</button>
                 <button onclick="switchTab('scanner')" id="btn-scanner" class="px-4 py-2 text-sm font-medium rounded-lg text-slate-600 hover:bg-slate-100 transition">Admin Scanner</button>
+                <button onclick="switchTab('admin-dashboard')" id="btn-admin-dashboard" class="hidden px-4 py-2 text-sm font-medium rounded-lg text-slate-600 hover:bg-slate-100 transition">Admin Dashboard</button>
                 <div id="auth-nav-container" class="pl-4 border-l border-slate-200">
                     <button onclick="openAuthModal()" id="btn-auth" type="button" class="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">Login / Register</button>
                     <div id="user-menu-container" class="hidden relative"></div>
@@ -92,7 +96,35 @@
                     <button onclick="loadEvents()" class="text-sm text-indigo-600 hover:underline font-medium">Refresh List</button>
                 </div>
             </div>
+            <div class="flex flex-col gap-3 border-y border-slate-200/80 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div class="flex flex-wrap gap-2" id="event-category-filters" role="group" aria-label="Filter events by category">
+                    <button type="button" data-category="All" onclick="setEventCategory('All')" class="category-filter is-active">All</button>
+                    <button type="button" data-category="Tech" onclick="setEventCategory('Tech')" class="category-filter">Tech</button>
+                    <button type="button" data-category="Cultural" onclick="setEventCategory('Cultural')" class="category-filter">Cultural</button>
+                    <button type="button" data-category="Sports" onclick="setEventCategory('Sports')" class="category-filter">Sports</button>
+                </div>
+                <label class="relative block w-full sm:max-w-xs">
+                    <span class="sr-only">Search events</span>
+                    <input id="event-search" type="search" placeholder="Search events" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-100">
+                </label>
+            </div>
             <div id="events-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        </section>
+
+        <section id="tab-admin-dashboard" class="hidden max-w-6xl mx-auto space-y-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-slate-900">Admin Dashboard</h1>
+                    <p class="mt-1 text-sm text-slate-500">Event registrations and gate activity.</p>
+                </div>
+                <button type="button" onclick="loadAdminDashboard()" class="text-sm font-semibold text-indigo-700 hover:underline">Refresh</button>
+            </div>
+            <div id="admin-metrics" class="grid grid-cols-1 gap-4 sm:grid-cols-3"></div>
+            <div class="flex items-center justify-between border-y border-slate-200 py-3">
+                <h2 class="font-semibold text-slate-900">Registrations by event</h2>
+                <button type="button" onclick="downloadAttendeeCsv()" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-white">Download attendee CSV</button>
+            </div>
+            <div id="admin-event-breakdown" class="divide-y divide-slate-200"></div>
         </section>
 
         <section id="tab-my-tickets" class="hidden max-w-6xl mx-auto p-6 space-y-6">
@@ -170,6 +202,22 @@
                         <span>Event Date</span>
                         <input id="event-date" name="date" type="date" required class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-100">
                     </label>
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <label class="block space-y-1 text-sm font-medium text-slate-700">
+                            <span>Category</span>
+                            <select id="event-category" name="category" required class="w-full rounded-lg border border-slate-300 px-3 py-2">
+                                <option>Tech</option><option>Cultural</option><option>Sports</option>
+                            </select>
+                        </label>
+                        <label class="block space-y-1 text-sm font-medium text-slate-700">
+                            <span>Capacity</span>
+                            <input id="event-capacity" name="capacity" type="number" min="1" value="100" required class="w-full rounded-lg border border-slate-300 px-3 py-2">
+                        </label>
+                    </div>
+                    <label class="block space-y-1 text-sm font-medium text-slate-700">
+                        <span>Venue</span>
+                        <input id="event-venue" name="venue" type="text" value="Campus venue" required class="w-full rounded-lg border border-slate-300 px-3 py-2">
+                    </label>
                     <div class="flex justify-end gap-2 pt-2">
                         <button type="button" onclick="closeEventModal()" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
                         <button type="submit" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Create Event</button>
@@ -186,6 +234,7 @@
                 <div class="min-w-0">
                     <p class="text-[11px] font-bold uppercase text-slate-500">Campus Connect · Digital Pass</p>
                     <h3 id="ticket-event-name" class="mt-1 break-words text-lg font-bold text-slate-900">Event</h3>
+                    <p id="ticket-event-venue" class="mt-1 text-sm text-slate-500">Campus venue</p>
                 </div>
                 <span id="ticket-state-badge" class="ticket-state-badge border-emerald-200 bg-emerald-50 text-emerald-700">● Valid Ticket</span>
             </header>
@@ -193,7 +242,7 @@
                 <img id="qr-image" src="" alt="Ticket QR Code" class="ticket-qr-image">
                 <div id="ticket-used-overlay" class="ticket-used-overlay hidden">CHECKED IN</div>
             </div>
-            <footer class="flex justify-center px-5 py-4">
+            <footer class="flex justify-center border-t border-dashed border-slate-200 px-5 py-4">
                 <button id="btn-automate-verify" type="button" onclick="automateGateCheckInVerification()" class="rounded-xl border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">Simulate Gate Check-In</button>
             </footer>
         </article>

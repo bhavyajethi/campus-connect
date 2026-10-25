@@ -27,14 +27,15 @@ class User(Base):
     password_hash = Column(String, nullable=False)
 
 class Event(Base):
-  __tablename__ = "events"
+    __tablename__ = "events"
 
-  id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-  name = Column(String, nullable=False)
-  date = Column(Date, nullable=False)
-  description = Column(
-      String, nullable=True
-  )
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String, nullable=False)
+    date = Column(Date, nullable=False)
+    description = Column(String, nullable=True)
+    category = Column(String, nullable=False, default="Tech", server_default="Tech")
+    venue = Column(String, nullable=False, default="Campus venue", server_default="Campus venue")
+    capacity = Column(Integer, nullable=False, default=100, server_default="100")
 
 class Registration(Base):
     __tablename__ = "registrations"

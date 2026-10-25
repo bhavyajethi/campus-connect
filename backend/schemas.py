@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from typing import Literal, Optional
 from uuid import UUID
 from datetime import date
@@ -27,6 +27,9 @@ class EventCreate(BaseModel):
     name: str
     date: date
     description: Optional[str] = None
+    category: Literal["Tech", "Cultural", "Sports"] = "Tech"
+    venue: str = "Campus venue"
+    capacity: int = Field(default=100, ge=1)
 
 # Output Schema: What the API sends back (includes the generated ID)
 class EventResponse(BaseModel):
@@ -34,6 +37,11 @@ class EventResponse(BaseModel):
     name: str
     date: date
     description: Optional[str] = None
+    category: str = "Tech"
+    venue: str = "Campus venue"
+    capacity: int = 100
+    current_registrations: int = 0
+    seats_remaining: int = 100
 
     model_config = ConfigDict(from_attributes=True)
         
@@ -54,6 +62,22 @@ class RegistrationResponse(BaseModel):
 class RegistrationWithEvent(RegistrationResponse):
     event_name: str
     event_date: date
+    event_venue: str = "Campus venue"
+
+class EventRegistrationBreakdown(BaseModel):
+    event_id: UUID
+    event_name: str
+    event_date: date
+    registered_count: int
+    verified_count: int
+    capacity: int
+
+class AdminStats(BaseModel):
+    total_users: int
+    total_tickets: int
+    verified_checkins: int
+    checkin_percentage: float
+    registrations_per_event: list[EventRegistrationBreakdown]
 
 # Input schema for the legacy verification route.
 class VerificationRequest(BaseModel):

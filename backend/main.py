@@ -1,11 +1,15 @@
 from fastapi import FastAPI, Depends, status, HTTPException 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.responses import Response
 from uuid import UUID
 import schemas
 import qrcode
 import io
+import csv
+from io import StringIO
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 from database import get_db
 from typing import List
@@ -25,6 +29,13 @@ app = FastAPI()
 
 @app.on_event("startup")
 def seed_admin_account():
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "ALTER TABLE events "
+            "ADD COLUMN IF NOT EXISTS category VARCHAR NOT NULL DEFAULT 'Tech', "
+            "ADD COLUMN IF NOT EXISTS venue VARCHAR NOT NULL DEFAULT 'Campus venue', "
+            "ADD COLUMN IF NOT EXISTS capacity INTEGER NOT NULL DEFAULT 100"
+        )
     auth.ensure_admin_account()
 
 app.add_middleware(
@@ -95,16 +106,28 @@ def create_event(
     new_event = models.Event(
         name=event.name,
         date=event.date,
-        description=event.description
+        description=event.description,
+        category=event.category,
+        venue=event.venue,
+        capacity=event.capacity,
     )
     
     # 2. Save to database
     db.add(new_event)
     db.commit()
     db.refresh(new_event)
-    
-    # 3. Return the created event
-    return new_event
+
+    return {
+        "id": new_event.id,
+        "name": new_event.name,
+        "date": new_event.date,
+        "description": new_event.description,
+        "category": new_event.category,
+        "venue": new_event.venue,
+        "capacity": new_event.capacity,
+        "current_registrations": 0,
+        "seats_remaining": new_event.capacity,
+    }
 
 # STEP 6: Event Listing Endpoint (GET)
 @app.get("/events/", response_model=List[schemas.EventResponse])
@@ -114,10 +137,35 @@ def get_events(
     include_past: bool = False,
     db: Session = Depends(get_db)
 ):
-    query = db.query(models.Event)
+    registration_counts = (
+        db.query(
+            models.Registration.event_id.label("event_id"),
+            func.count(models.Registration.id).label("current_registrations"),
+        )
+        .group_by(models.Registration.event_id)
+        .subquery()
+    )
+    query = db.query(
+        models.Event,
+        func.coalesce(registration_counts.c.current_registrations, 0).label("current_registrations"),
+    ).outerjoin(registration_counts, registration_counts.c.event_id == models.Event.id)
     if not include_past:
         query = query.filter(models.Event.date >= date.today())
-    return query.order_by(models.Event.date.asc()).offset(skip).limit(limit).all()
+    rows = query.order_by(models.Event.date.asc()).offset(skip).limit(limit).all()
+    return [
+        {
+            "id": event.id,
+            "name": event.name,
+            "date": event.date,
+            "description": event.description,
+            "category": event.category,
+            "venue": event.venue,
+            "capacity": event.capacity,
+            "current_registrations": count,
+            "seats_remaining": max(event.capacity - count, 0),
+        }
+        for event, count in rows
+    ]
 
 @app.post("/registrations/", response_model=schemas.RegistrationResponse, status_code=status.HTTP_201_CREATED)
 def create_registration(reg: schemas.RegistrationCreate, db: Session = Depends(get_db)):
@@ -127,7 +175,7 @@ def create_registration(reg: schemas.RegistrationCreate, db: Session = Depends(g
         raise HTTPException(status_code=404, detail="User not found")
         
     # 2. Verify Event exists
-    event = db.query(models.Event).filter(models.Event.id == reg.event_id).first()
+    event = db.query(models.Event).filter(models.Event.id == reg.event_id).with_for_update().first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
         
@@ -138,6 +186,12 @@ def create_registration(reg: schemas.RegistrationCreate, db: Session = Depends(g
     ).first()
     if existing_reg:
         raise HTTPException(status_code=400, detail="User is already registered for this event")
+
+    current_registrations = db.query(func.count(models.Registration.id)).filter(
+        models.Registration.event_id == reg.event_id
+    ).scalar()
+    if current_registrations >= event.capacity:
+        raise HTTPException(status_code=400, detail="Event Sold Out")
         
     # 4. Save Registration to Database
     new_reg = models.Registration(
@@ -162,7 +216,7 @@ def create_registration_authenticated(
     current_user: models.User = Depends(auth.get_current_user)
 ):
     # Verify event exists
-    event = db.query(models.Event).filter(models.Event.id == event_id).first()
+    event = db.query(models.Event).filter(models.Event.id == event_id).with_for_update().first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
         
@@ -173,6 +227,12 @@ def create_registration_authenticated(
     ).first()
     if existing_reg:
         raise HTTPException(status_code=400, detail="User already registered for this event")
+
+    current_registrations = db.query(func.count(models.Registration.id)).filter(
+        models.Registration.event_id == event_id
+    ).scalar()
+    if current_registrations >= event.capacity:
+        raise HTTPException(status_code=400, detail="Event Sold Out")
         
     new_reg = models.Registration(user_id=current_user.id, event_id=event_id)
     db.add(new_reg)
@@ -219,9 +279,81 @@ def get_my_registrations(
             "is_verified": registration.is_verified,
             "event_name": event.name,
             "event_date": event.date,
+            "event_venue": event.venue,
         }
         for registration, event in registrations
     ]
+
+def require_admin(current_user: models.User) -> None:
+    role = current_user.role.value if isinstance(current_user.role, models.RoleEnum) else current_user.role
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+@app.get("/admin/stats", response_model=schemas.AdminStats)
+def get_admin_stats(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    require_admin(current_user)
+    total_users = db.query(func.count(models.User.id)).scalar() or 0
+    total_tickets = db.query(func.count(models.Registration.id)).scalar() or 0
+    verified_checkins = db.query(func.count(models.Registration.id)).filter(
+        models.Registration.is_verified.is_(True)
+    ).scalar() or 0
+    breakdown_rows = (
+        db.query(
+            models.Event,
+            func.count(models.Registration.id).label("registered_count"),
+            func.coalesce(
+                func.sum(case((models.Registration.is_verified.is_(True), 1), else_=0)),
+                0,
+            ).label("verified_count"),
+        )
+        .outerjoin(models.Registration, models.Registration.event_id == models.Event.id)
+        .group_by(models.Event.id)
+        .order_by(models.Event.date.desc())
+        .all()
+    )
+    return {
+        "total_users": total_users,
+        "total_tickets": total_tickets,
+        "verified_checkins": verified_checkins,
+        "checkin_percentage": round(verified_checkins / total_tickets * 100, 1) if total_tickets else 0.0,
+        "registrations_per_event": [
+            {
+                "event_id": event.id,
+                "event_name": event.name,
+                "event_date": event.date,
+                "registered_count": registered_count,
+                "verified_count": verified_count,
+                "capacity": event.capacity,
+            }
+            for event, registered_count, verified_count in breakdown_rows
+        ],
+    }
+
+@app.get("/admin/attendees.csv")
+def export_admin_attendees(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    require_admin(current_user)
+    rows = (
+        db.query(models.Event.name, models.Event.date, models.User.name, models.User.email, models.Registration.is_verified)
+        .join(models.Registration, models.Registration.event_id == models.Event.id)
+        .join(models.User, models.User.id == models.Registration.user_id)
+        .order_by(models.Event.date, models.Event.name, models.User.name)
+        .all()
+    )
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["event_name", "event_date", "attendee_name", "attendee_email", "checked_in"])
+    writer.writerows(rows)
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=campus-connect-attendees.csv"},
+    )
 
 
 # STEP 7: Generate Live QR Code Image Endpoint

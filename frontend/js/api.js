@@ -89,6 +89,33 @@ const api = {
         return apiRequest(`${API_BASE}/registrations/me`);
     },
 
+    async fetchAdminStats() {
+        return apiRequest(`${API_BASE}/admin/stats`);
+    },
+
+    async downloadAttendeeCsv() {
+        const token = localStorage.getItem("token");
+        let response;
+        try {
+            response = await fetch(`${API_BASE}/admin/attendees.csv`, {
+                headers: token ? { "Authorization": `Bearer ${token}` } : {}
+            });
+        } catch {
+            throw new Error("Unable to connect to the Campus Connect server.");
+        }
+        if (response.status === 401) {
+            localStorage.removeItem("token");
+            localStorage.removeItem("user");
+            if (typeof updateAuthUI === "function") updateAuthUI();
+            if (typeof openAuthModal === "function") openAuthModal();
+        }
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.detail || "Unable to download attendee list.");
+        }
+        return response.blob();
+    },
+
     // 4. Admin Gate QR Verification APIs
     async verifyTicket(ticketId) {
         return apiRequest(`${API_BASE}/registrations/${encodeURIComponent(ticketId)}/verify`, {

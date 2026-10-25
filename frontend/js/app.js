@@ -2,6 +2,8 @@ let html5QrCode = null;
 let generatedTicketId = null;
 let userRegistrations = [];
 let currentTicket = null;
+let currentEvents = [];
+let selectedEventCategory = 'All';
 
 function showToast(message, type = 'success') {
     const container = document.getElementById('toast-container');
@@ -59,7 +61,9 @@ function updateAuthUI() {
         ? storedUser || { name: 'Campus Connect User', email: '', role: 'student' }
         : null;
     const myTicketsButton = document.getElementById('btn-my-tickets');
+    const adminDashboardButton = document.getElementById('btn-admin-dashboard');
     myTicketsButton.classList.toggle('hidden', !hasSession);
+    adminDashboardButton.classList.toggle('hidden', user?.role !== 'admin');
     loginButton.classList.toggle('hidden', hasSession);
     userMenuContainer.classList.toggle('hidden', !hasSession);
 
@@ -67,7 +71,10 @@ function updateAuthUI() {
         purgePrivateState();
         userMenuContainer.replaceChildren();
         updateCreateEventVisibility(null);
-        if (!document.getElementById('tab-my-tickets').classList.contains('hidden')) {
+        if (
+            !document.getElementById('tab-my-tickets').classList.contains('hidden') ||
+            !document.getElementById('tab-admin-dashboard').classList.contains('hidden')
+        ) {
             switchTab('events');
         }
         return;
@@ -178,7 +185,8 @@ function switchTab(tabName) {
         events: { section: 'tab-events', button: 'btn-events' },
         register: { section: 'tab-register', button: 'btn-register' },
         scanner: { section: 'tab-scanner', button: 'btn-scanner' },
-        'my-tickets': { section: 'tab-my-tickets', button: 'btn-my-tickets' }
+        'my-tickets': { section: 'tab-my-tickets', button: 'btn-my-tickets' },
+        'admin-dashboard': { section: 'tab-admin-dashboard', button: 'btn-admin-dashboard' }
     };
 
     if (!tabs[tabName]) return;
@@ -186,6 +194,10 @@ function switchTab(tabName) {
         showToast('Please log in to view your tickets', 'info');
         toggleAuthMode('login');
         openAuthModal();
+        tabName = 'events';
+    }
+    if (tabName === 'admin-dashboard' && (!localStorage.getItem('token') || getSessionUser()?.role !== 'admin')) {
+        showToast('Admin access required.', 'error');
         tabName = 'events';
     }
 
@@ -209,6 +221,9 @@ function switchTab(tabName) {
     if (tabName === 'my-tickets') {
         return loadMyTickets();
     }
+    if (tabName === 'admin-dashboard') {
+        return loadAdminDashboard();
+    }
 }
 
 // --- Load Events Catalog & Populate Selection Dropdown ---
@@ -224,6 +239,7 @@ async function loadEvents() {
     try {
         const events = await api.fetchEvents();
         if (localStorage.getItem('token') !== token) return;
+        currentEvents = events;
         if (token && localStorage.getItem('token') === token) {
             try {
                 const registrations = await api.fetchMyRegistrations(token);
@@ -241,6 +257,7 @@ async function loadEvents() {
         selectDropdown.innerHTML = `<option value="" disabled selected>-- Select an Event --</option>`;
 
         if (events.length === 0) {
+            renderEventCards(new Set(userRegistrations.map((registration) => registration.event_id)));
             grid.innerHTML = `<p class="text-sm text-slate-400 col-span-full text-center py-10">No upcoming events found. Create one in Swagger UI with a future date!</p>`;
             return;
         }
@@ -251,33 +268,123 @@ async function loadEvents() {
             option.value = event.id;
             option.textContent = event.name;
             option.dataset.eventDate = event.date;
+            option.dataset.eventVenue = event.venue || 'Campus venue';
             selectDropdown.appendChild(option);
         });
         if (events.some(event => event.id === selectedEventId)) {
             selectDropdown.value = selectedEventId;
         }
-
-        grid.innerHTML = events.map(event => `
-            <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4 flex flex-col justify-between">
-                <div>
-                    <div class="flex justify-between items-start mb-2">
-                        <h3 class="font-bold text-slate-900 text-lg">${event.name}</h3>
-                        <span class="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full font-semibold">${event.date}</span>
-                    </div>
-                    <p class="text-sm text-slate-600 line-clamp-3">${event.description || "No description provided."}</p>
-                </div>
-                <div class="pt-4 border-t border-slate-100 flex items-center justify-end">
-                    ${registeredEventIds.has(event.id)
-                        ? `<button onclick="handleEventSelection('${event.id}')" class="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2 rounded-lg font-semibold flex items-center gap-1"><span>Registered</span> <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></button>`
-                        : `<button onclick="handleEventSelection('${event.id}')" class="text-xs bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg font-medium">Select Event</button>`}
-                </div>
-            </div>
-        `).join('');
+        renderEventCards(registeredEventIds);
     } catch (err) {
         grid.textContent = `Unable to load events: ${err.message}`;
         grid.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-sm text-rose-700';
         if (err.status !== 401) showToast(err.message, 'error');
     }
+}
+
+function setEventCategory(category) {
+    selectedEventCategory = category;
+    document.querySelectorAll('.category-filter').forEach((button) => {
+        button.classList.toggle('is-active', button.dataset.category === category);
+    });
+    renderEventCards(new Set(userRegistrations.map((registration) => registration.event_id)));
+}
+
+function renderEventCards(registeredEventIds = new Set(userRegistrations.map((registration) => registration.event_id))) {
+    const grid = document.getElementById('events-grid');
+    const searchTerm = document.getElementById('event-search').value.trim().toLowerCase();
+    const filteredEvents = currentEvents.filter((event) => {
+        const matchesCategory = selectedEventCategory === 'All' || event.category === selectedEventCategory;
+        const searchableText = `${event.name} ${event.description || ''} ${event.venue || ''}`.toLowerCase();
+        return matchesCategory && searchableText.includes(searchTerm);
+    });
+
+    if (filteredEvents.length === 0) {
+        grid.innerHTML = '<p class="col-span-full py-10 text-center text-sm text-slate-500">No events match these filters.</p>';
+        return;
+    }
+
+    const cards = filteredEvents.map((event) => {
+        const capacity = Number(event.capacity) || 100;
+        const claimed = Number(event.current_registrations) || 0;
+        const remaining = Number.isFinite(Number(event.seats_remaining))
+            ? Math.max(0, Number(event.seats_remaining))
+            : Math.max(0, capacity - claimed);
+        const soldOut = remaining <= 0 || claimed >= capacity;
+        const percentage = Math.min(100, capacity ? claimed / capacity * 100 : 0);
+        const card = document.createElement('article');
+        card.className = 'event-card flex flex-col justify-between gap-5 rounded-xl bg-white p-6 shadow-sm';
+
+        const content = document.createElement('div');
+        const header = document.createElement('div');
+        header.className = 'mb-3 flex items-start justify-between gap-3';
+        const title = document.createElement('h2');
+        title.className = 'text-lg font-bold text-slate-900';
+        title.textContent = event.name;
+        const category = document.createElement('span');
+        category.className = 'shrink-0 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700';
+        category.textContent = event.category || 'Tech';
+        header.append(title, category);
+
+        const dateVenue = document.createElement('p');
+        dateVenue.className = 'text-sm font-medium text-slate-600';
+        dateVenue.textContent = `${event.date} · ${event.venue || 'Campus venue'}`;
+        const description = document.createElement('p');
+        description.className = 'mt-2 line-clamp-3 text-sm leading-6 text-slate-600';
+        description.textContent = event.description || 'No description provided.';
+
+        const availability = document.createElement('div');
+        availability.className = 'mt-5';
+        const availabilityLabel = document.createElement('div');
+        availabilityLabel.className = 'mb-2 flex justify-between gap-3 text-xs font-semibold';
+        const count = document.createElement('span');
+        count.className = 'text-slate-600';
+        count.textContent = `${claimed} / ${capacity} Seats Claimed`;
+        const remainingLabel = document.createElement('span');
+        remainingLabel.className = soldOut ? 'text-rose-700' : 'text-slate-500';
+        remainingLabel.textContent = soldOut ? 'Sold Out' : `${remaining} left`;
+        availabilityLabel.append(count, remainingLabel);
+        const track = document.createElement('div');
+        track.className = 'availability-track';
+        const fill = document.createElement('div');
+        fill.className = `availability-fill ${soldOut ? 'is-sold-out' : percentage >= 80 ? 'is-nearly-full' : ''}`;
+        fill.style.width = `${percentage}%`;
+        track.appendChild(fill);
+        availability.append(availabilityLabel, track);
+        content.append(header, dateVenue, description, availability);
+
+        const actionRow = document.createElement('div');
+        actionRow.className = 'flex items-center justify-end border-t border-slate-100 pt-4';
+        const action = document.createElement('button');
+        action.type = 'button';
+        if (soldOut && !registeredEventIds.has(event.id)) {
+            action.disabled = true;
+            action.className = 'cursor-not-allowed rounded-lg bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-700';
+            action.textContent = 'Sold Out';
+        } else if (registeredEventIds.has(event.id)) {
+            action.className = 'flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-700';
+            action.innerHTML = '<span>Registered</span><span aria-hidden="true">✓</span>';
+            action.addEventListener('click', () => handleEventSelection(event.id));
+        } else {
+            action.className = 'rounded-lg bg-slate-900 px-4 py-2 text-xs font-medium text-white transition hover:bg-slate-800';
+            action.textContent = 'Select Event';
+            action.addEventListener('click', () => handleEventSelection(event.id));
+        }
+        actionRow.appendChild(action);
+        card.append(content, actionRow);
+        return card;
+    });
+    grid.replaceChildren(...cards);
+}
+
+document.getElementById('event-search').addEventListener('input', () => {
+    renderEventCards(new Set(userRegistrations.map((registration) => registration.event_id)));
+});
+
+function initializeEventFilters() {
+    document.querySelectorAll('.category-filter').forEach((button) => {
+        button.classList.toggle('is-active', button.dataset.category === selectedEventCategory);
+    });
 }
 
 function handleEventSelection(eventId) {
@@ -363,19 +470,97 @@ function renderTicketCards(grid, tickets, isHistory) {
         viewButton.type = 'button';
         viewButton.className = 'self-start rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50';
         viewButton.textContent = 'View Pass';
-        viewButton.addEventListener('click', () => viewTicketPass(ticket.event_id, ticket.event_name, ticket.event_date));
+        viewButton.addEventListener('click', () => viewTicketPass(ticket.event_id, ticket.event_name, ticket.event_date, ticket.event_venue));
         card.append(details, viewButton);
         return card;
     });
     grid.replaceChildren(...cards);
 }
 
-async function viewTicketPass(eventId, eventName, eventDate) {
+async function loadAdminDashboard() {
+    if (getSessionUser()?.role !== 'admin') {
+        switchTab('events');
+        return;
+    }
+
+    const metrics = document.getElementById('admin-metrics');
+    const breakdown = document.getElementById('admin-event-breakdown');
+    metrics.innerHTML = '<p class="text-sm text-slate-500">Loading metrics...</p>';
+    breakdown.replaceChildren();
+    try {
+        const stats = await api.fetchAdminStats();
+        if (getSessionUser()?.role !== 'admin') return;
+        const metricCards = [
+            { label: 'Total Users', value: stats.total_users },
+            { label: 'Total Tickets', value: stats.total_tickets },
+            { label: 'Gate Check-Ins', value: `${stats.checkin_percentage}%` }
+        ];
+        metrics.replaceChildren(...metricCards.map(({ label, value }) => {
+            const card = document.createElement('article');
+            card.className = 'rounded-xl border border-slate-200 bg-white p-5 shadow-sm';
+            const title = document.createElement('p');
+            title.className = 'text-sm font-medium text-slate-500';
+            title.textContent = label;
+            const number = document.createElement('p');
+            number.className = 'mt-2 text-3xl font-bold text-slate-900';
+            number.textContent = String(value);
+            card.append(title, number);
+            return card;
+        }));
+
+        const rows = stats.registrations_per_event.map((item) => {
+            const row = document.createElement('div');
+            row.className = 'flex flex-wrap items-center justify-between gap-3 py-4';
+            const eventInfo = document.createElement('div');
+            const name = document.createElement('p');
+            name.className = 'font-semibold text-slate-900';
+            name.textContent = item.event_name;
+            const date = document.createElement('p');
+            date.className = 'text-sm text-slate-500';
+            date.textContent = `${item.event_date} · ${item.capacity} seats`;
+            eventInfo.append(name, date);
+            const count = document.createElement('p');
+            count.className = 'text-sm font-semibold text-slate-700';
+            count.textContent = `${item.registered_count} registered · ${item.verified_count} checked in`;
+            row.append(eventInfo, count);
+            return row;
+        });
+        if (rows.length) breakdown.replaceChildren(...rows);
+        else breakdown.innerHTML = '<p class="py-5 text-sm text-slate-500">No event registrations yet.</p>';
+    } catch (error) {
+        metrics.innerHTML = '';
+        const message = document.createElement('p');
+        message.className = 'text-sm text-rose-700';
+        message.textContent = `Unable to load dashboard: ${error.message}`;
+        metrics.appendChild(message);
+    }
+}
+
+async function downloadAttendeeCsv() {
+    if (getSessionUser()?.role !== 'admin') {
+        showToast('Admin access required.', 'error');
+        return;
+    }
+    try {
+        const blob = await api.downloadAttendeeCsv();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'campus-connect-attendees.csv';
+        link.click();
+        URL.revokeObjectURL(url);
+    } catch (error) {
+        showToast(`Unable to download attendee list: ${error.message}`, 'error');
+    }
+}
+
+async function viewTicketPass(eventId, eventName, eventDate, eventVenue = 'Campus venue') {
     await switchTab('register');
     const selectDropdown = document.getElementById('reg-event-select');
     if (!Array.from(selectDropdown.options).some((option) => option.value === eventId)) {
         const option = new Option(eventName, eventId);
         option.dataset.eventDate = eventDate;
+        option.dataset.eventVenue = eventVenue;
         selectDropdown.add(option);
     }
     selectDropdown.value = eventId;
@@ -413,6 +598,7 @@ function displayTicket(registration, eventDate = null) {
     qrImage.classList.toggle('is-used', isVerified || isExpired);
     document.getElementById('ticket-event-name').textContent =
         document.getElementById('reg-event-select').selectedOptions[0]?.textContent || 'Campus Event';
+    document.getElementById('ticket-event-venue').textContent = selectedOption?.dataset.eventVenue || 'Campus venue';
 
     qrImage.src = api.getQrCodeUrl(registration.id);
 
@@ -539,7 +725,13 @@ document.getElementById('event-create-form').addEventListener('submit', async (e
     const eventData = {
         name: document.getElementById('event-name').value.trim(),
         description: document.getElementById('event-description').value.trim() || null,
-        date: document.getElementById('event-date').value
+        date: document.getElementById('event-date').value,
+        category: document.getElementById('event-category').value,
+        venue: document.getElementById('event-venue').value.trim(),
+        capacity: Number(document.getElementById('event-capacity').value)
+        category: document.getElementById('event-category').value,
+        venue: document.getElementById('event-venue').value.trim(),
+        capacity: Number(document.getElementById('event-capacity').value)
     };
 
     try {
@@ -679,5 +871,6 @@ async function processTicketVerification(ticketId) {
 }
 
 // Initializing state on app start
+initializeEventFilters();
 updateAuthUI();
 loadEvents();
