@@ -96,18 +96,6 @@
                     <button onclick="loadEvents()" class="text-sm text-indigo-600 hover:underline font-medium">Refresh List</button>
                 </div>
             </div>
-            <div class="flex flex-col gap-3 border-y border-slate-200/80 py-4 sm:flex-row sm:items-center sm:justify-between">
-                <div class="flex flex-wrap gap-2" id="event-category-filters" role="group" aria-label="Filter events by category">
-                    <button type="button" data-category="All" onclick="setEventCategory('All')" class="category-filter is-active">All</button>
-                    <button type="button" data-category="Tech" onclick="setEventCategory('Tech')" class="category-filter">Tech</button>
-                    <button type="button" data-category="Cultural" onclick="setEventCategory('Cultural')" class="category-filter">Cultural</button>
-                    <button type="button" data-category="Sports" onclick="setEventCategory('Sports')" class="category-filter">Sports</button>
-                </div>
-                <label class="relative block w-full sm:max-w-xs">
-                    <span class="sr-only">Search events</span>
-                    <input id="event-search" type="search" placeholder="Search events" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-100">
-                </label>
-            </div>
             <div id="events-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
         </section>
 
@@ -171,19 +159,21 @@
             </div>
             
             <div class="space-y-3">
-                <div id="reader" class="w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 min-h-[280px] flex items-center justify-center text-white text-xs">
-                    Camera Standby
-                </div>
-                <div class="flex space-x-2">
-                    <button id="btn-start-camera" onclick="startCameraScanner()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl text-xs font-semibold transition">Start Camera</button>
-                    <button id="btn-stop-camera" onclick="stopCameraScanner()" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 py-2.5 rounded-xl text-xs font-semibold transition">Stop Camera</button>
-                </div>
-            </div>
+                <form id="scanner-form" class="space-y-3" onsubmit="return false">
+                    <div id="reader" class="w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 min-h-[280px] flex items-center justify-center text-white text-xs">
+                        Camera Standby
+                    </div>
+                    <div class="flex space-x-2">
+                        <button id="btn-start-camera" type="button" onclick="startCameraScanner()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl text-xs font-semibold transition">Start Camera</button>
+                        <button id="btn-stop-camera" type="button" onclick="stopCameraScanner()" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 py-2.5 rounded-xl text-xs font-semibold transition">Stop Camera</button>
+                    </div>
+                </form>
 
-            <div id="scanner-result" class="hidden p-4 rounded-xl text-sm font-medium text-center"></div>
+                <div id="scanner-result" class="hidden p-4 rounded-xl text-sm font-medium text-center"></div>
+            </div>
         </section>
 
-        <div id="event-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" role="dialog" aria-modal="true" aria-labelledby="event-modal-title">
+        <div id="create-event-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" role="dialog" aria-modal="true" aria-labelledby="event-modal-title">
             <div class="w-full max-w-lg space-y-5 rounded-xl bg-white p-6 shadow-2xl">
                 <div class="flex items-center justify-between border-b border-slate-200 pb-3">
                     <h2 id="event-modal-title" class="text-lg font-bold text-slate-900">Create Event</h2>
