@@ -27,6 +27,31 @@ function getSessionUser() {
     }
 }
 
+function getDecodedSessionUser() {
+    const savedUser = getSessionUser();
+    if (savedUser && typeof savedUser.role === 'string') {
+        return savedUser;
+    }
+
+    const token = localStorage.getItem('token');
+    if (!token) return null;
+
+    try {
+        const payload = token.split('.')[1];
+        const normalizedPayload = payload.replace(/-/g, '+').replace(/_/g, '/');
+        const decoded = JSON.parse(atob(normalizedPayload));
+        if (!decoded) return null;
+        return {
+            id: decoded.sub || decoded.user_id || null,
+            name: decoded.name || 'Campus Connect User',
+            email: decoded.email || '',
+            role: decoded.role || 'student'
+        };
+    } catch {
+        return null;
+    }
+}
+
 function getInitials(name = '') {
     const names = name.trim().split(/\s+/).filter(Boolean);
     if (!names.length) return '?';
@@ -51,73 +76,105 @@ function toggleAuthMode(mode) {
 
 function updateAuthUI() {
     const token = localStorage.getItem('token');
-    const user = getSessionUser();
+    const user = getDecodedSessionUser();
+    const role = user?.role || 'guest';
+    const isGuest = !token || role === 'guest';
+    const isStudent = role === 'student';
+    const isAdmin = role === 'admin';
+
+    const eventsButton = document.getElementById('btn-events');
+    const registerButton = document.getElementById('btn-register');
+    const myTicketsButton = document.getElementById('btn-my-tickets');
+    const scannerButton = document.getElementById('btn-scanner');
+    const adminDashboardButton = document.getElementById('btn-admin-dashboard');
     const loginButton = document.getElementById('btn-auth');
     const userMenu = document.getElementById('user-menu-container');
-    const myTicketsButton = document.getElementById('btn-my-tickets');
-    const dashboardButton = document.getElementById('btn-admin-dashboard');
     const createEventButton = document.getElementById('btn-create-event');
 
-    loginButton.classList.toggle('hidden', Boolean(token));
-    myTicketsButton.classList.toggle('hidden', !token);
-    dashboardButton?.classList.toggle('hidden', !token || user?.role !== 'admin');
-    createEventButton?.classList.toggle('hidden', !token || user?.role !== 'admin');
-    userMenu.classList.toggle('hidden', !token);
+    const activeButtonClass = 'px-4 py-2 text-sm font-medium rounded-lg bg-indigo-50 text-indigo-600 transition';
+    const inactiveButtonClass = 'px-4 py-2 text-sm font-medium rounded-lg text-slate-600 hover:bg-slate-100 transition';
 
-    if (!token) {
+    eventsButton.className = activeButtonClass;
+    registerButton.className = inactiveButtonClass;
+    myTicketsButton.className = inactiveButtonClass;
+    scannerButton.className = inactiveButtonClass;
+    adminDashboardButton.className = inactiveButtonClass;
+
+    if (isGuest) {
+        eventsButton.classList.remove('hidden');
+        registerButton.classList.add('hidden');
+        myTicketsButton.classList.add('hidden');
+        scannerButton.classList.add('hidden');
+        adminDashboardButton.classList.add('hidden');
+        loginButton.classList.remove('hidden');
+        userMenu.classList.add('hidden');
         userMenu.replaceChildren();
-        userRegistrations = [];
-        currentTicket = null;
-        generatedTicketId = null;
-        document.getElementById('active-tickets-grid')?.replaceChildren();
-        document.getElementById('past-tickets-grid')?.replaceChildren();
-        const ticketResult = document.getElementById('ticket-result');
-        ticketResult?.replaceChildren();
-        ticketResult?.classList.add('hidden');
-        if (document.getElementById('tab-my-tickets') && !document.getElementById('tab-my-tickets').classList.contains('hidden')) {
-            switchTab('events');
-        }
+        createEventButton?.classList.add('hidden');
         return;
     }
 
-    const isAdmin = user?.role === 'admin';
+    if (isStudent) {
+        eventsButton.classList.remove('hidden');
+        registerButton.classList.remove('hidden');
+        myTicketsButton.classList.remove('hidden');
+        scannerButton.classList.add('hidden');
+        adminDashboardButton.classList.add('hidden');
+        loginButton.classList.add('hidden');
+        userMenu.classList.remove('hidden');
+        createEventButton?.classList.add('hidden');
+    } else if (isAdmin) {
+        eventsButton.classList.remove('hidden');
+        registerButton.classList.add('hidden');
+        myTicketsButton.classList.add('hidden');
+        scannerButton.classList.remove('hidden');
+        adminDashboardButton.classList.remove('hidden');
+        loginButton.classList.add('hidden');
+        userMenu.classList.remove('hidden');
+        createEventButton?.classList.remove('hidden');
+    }
+
+    const isAdminAvatar = isAdmin;
     const wrapper = document.createElement('div');
     wrapper.className = 'relative flex items-center gap-2';
-    const avatar = document.createElement('button');
-    avatar.type = 'button';
-    avatar.className = `flex h-9 w-9 items-center justify-center rounded-full font-bold text-white shadow-sm ${isAdmin ? 'bg-indigo-600' : 'bg-slate-700'}`;
-    avatar.textContent = isAdmin ? 'A' : getInitials(user?.name || '');
-    avatar.setAttribute('aria-label', 'Open account menu');
-    avatar.setAttribute('aria-expanded', 'false');
+    const avatarButton = document.createElement('button');
+    avatarButton.type = 'button';
+    avatarButton.className = `flex h-9 w-9 items-center justify-center rounded-full font-bold text-white shadow-sm ${isAdminAvatar ? 'bg-indigo-600' : 'bg-slate-700'}`;
+    avatarButton.textContent = isAdminAvatar ? 'A' : getInitials(user?.name || 'Campus Connect User');
+    avatarButton.setAttribute('aria-label', 'Open account menu');
+    avatarButton.setAttribute('aria-expanded', 'false');
 
-    const roleLabel = document.createElement('span');
-    roleLabel.className = `text-[10px] font-bold ${isAdmin ? 'text-indigo-700' : 'text-slate-500'}`;
-    roleLabel.textContent = isAdmin ? 'ADMIN' : '';
+    const roleTag = document.createElement('span');
+    roleTag.className = `text-[10px] font-bold ${isAdminAvatar ? 'text-indigo-700' : 'text-slate-500'}`;
+    roleTag.textContent = isAdminAvatar ? 'ADMIN' : '';
 
     const menu = document.createElement('div');
     menu.className = 'absolute right-0 top-12 z-50 hidden w-64 rounded-lg border border-slate-200 bg-white p-4 text-left shadow-xl';
     menu.setAttribute('role', 'menu');
+
     const name = document.createElement('p');
     name.className = 'truncate text-sm font-semibold text-slate-900';
     name.textContent = user?.name || 'Campus Connect User';
     const email = document.createElement('p');
     email.className = 'mt-1 truncate text-xs text-slate-500';
     email.textContent = user?.email || '';
-    const role = document.createElement('span');
-    role.className = 'mt-3 inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase text-slate-700';
-    role.textContent = isAdmin ? 'Admin' : 'Student';
+    const roleBadge = document.createElement('span');
+    roleBadge.className = 'mt-3 inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase text-slate-700';
+    roleBadge.textContent = isAdminAvatar ? 'Admin' : 'Student';
+
     const logoutButton = document.createElement('button');
     logoutButton.type = 'button';
     logoutButton.className = 'mt-4 w-full rounded-md border border-slate-200 px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50';
     logoutButton.textContent = 'Logout';
     logoutButton.addEventListener('click', logout);
-    menu.append(name, email, role, logoutButton);
-    avatar.addEventListener('click', () => {
-        const opening = menu.classList.contains('hidden');
-        menu.classList.toggle('hidden', !opening);
-        avatar.setAttribute('aria-expanded', String(opening));
+
+    menu.append(name, email, roleBadge, logoutButton);
+    avatarButton.addEventListener('click', () => {
+        const willOpen = menu.classList.contains('hidden');
+        menu.classList.toggle('hidden', !willOpen);
+        avatarButton.setAttribute('aria-expanded', String(willOpen));
     });
-    wrapper.append(avatar, roleLabel, menu);
+
+    wrapper.append(avatarButton, roleTag, menu);
     userMenu.replaceChildren(wrapper);
 }
 
@@ -131,29 +188,39 @@ function switchTab(tabName) {
     };
     if (!tabs[tabName]) return;
 
-    const token = localStorage.getItem('token');
-    if (tabName === 'my-tickets' && !token) {
-        showToast('Please log in to view your tickets', 'info');
-        toggleAuthMode('login');
+    const user = getDecodedSessionUser();
+    const role = user?.role || 'guest';
+
+    if (!user && tabName !== 'events') {
+        showToast('Please log in to access that page.', 'info');
         openAuthModal();
         tabName = 'events';
     }
-    if (tabName === 'admin-dashboard' && (!token || getSessionUser()?.role !== 'admin')) {
-        showToast('Admin access required.', 'error');
+
+    if (role === 'admin' && (tabName === 'register' || tabName === 'my-tickets')) {
+        showToast('Admin users cannot access student ticketing tabs.', 'error');
+        tabName = 'events';
+    }
+
+    if (role === 'student' && (tabName === 'scanner' || tabName === 'admin-dashboard')) {
+        showToast('Student users cannot access admin tools.', 'error');
         tabName = 'events';
     }
 
     Object.values(tabs).forEach(([sectionId, buttonId]) => {
         document.getElementById(sectionId)?.classList.add('hidden');
         const button = document.getElementById(buttonId);
-        button?.classList.remove('bg-indigo-50', 'text-indigo-600');
-        button?.classList.add('text-slate-600', 'hover:bg-slate-100');
+        if (!button) return;
+        button.className = 'px-4 py-2 text-sm font-medium rounded-lg text-slate-600 hover:bg-slate-100 transition';
     });
+
     const [activeSection, activeButton] = tabs[tabName];
-    document.getElementById(activeSection).classList.remove('hidden');
-    const button = document.getElementById(activeButton);
-    button?.classList.add('bg-indigo-50', 'text-indigo-600');
-    button?.classList.remove('text-slate-600', 'hover:bg-slate-100');
+    document.getElementById(activeSection)?.classList.remove('hidden');
+    const selectedButton = document.getElementById(activeButton);
+    if (selectedButton) {
+        selectedButton.className = 'px-4 py-2 text-sm font-medium rounded-lg bg-indigo-50 text-indigo-600 transition';
+    }
+
     updateAuthUI();
 
     if (tabName !== 'scanner') stopCameraScanner();
