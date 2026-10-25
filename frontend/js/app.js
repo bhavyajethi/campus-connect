@@ -400,7 +400,18 @@ function renderEventCards(events, registeredIds) {
         availability.append(label, track);
         info.append(heading, dateVenue, description, availability);
         const footer = document.createElement('div');
-        footer.className = 'flex justify-end border-t border-slate-100 pt-4';
+        footer.className = 'flex items-center justify-between gap-2 border-t border-slate-100 pt-4';
+
+        const deleteButton = document.createElement('button');
+        deleteButton.type = 'button';
+        const currentRole = getDecodedSessionUser()?.role || 'guest';
+        if (currentRole === 'admin') {
+            deleteButton.setAttribute('onclick', `handleDeleteEvent('${event.id}')`);
+            deleteButton.className = 'text-xs bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1';
+            deleteButton.textContent = 'Delete';
+            deleteButton.title = 'Delete event';
+        }
+
         const action = document.createElement('button');
         action.type = 'button';
         if (soldOut && !registeredIds.has(event.id)) {
@@ -414,11 +425,29 @@ function renderEventCards(events, registeredIds) {
             action.textContent = registeredIds.has(event.id) ? 'Registered ✓' : 'Select Event';
             action.addEventListener('click', () => handleEventSelection(event.id));
         }
-        footer.append(action);
+        if (currentRole === 'admin') {
+            footer.append(deleteButton, action);
+        } else {
+            footer.append(action);
+        }
         card.append(info, footer);
         return card;
     });
     grid.replaceChildren(...cards);
+}
+
+async function handleDeleteEvent(eventId) {
+    if (!confirm('Are you sure you want to cancel and delete this event?')) return;
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    try {
+        await api.deleteEvent(eventId, token);
+        showToast('Event deleted successfully', 'success');
+        await loadEvents();
+    } catch (error) {
+        showToast(error.message || 'Failed to delete event', 'error');
+    }
 }
 
 function handleEventSelection(eventId) {

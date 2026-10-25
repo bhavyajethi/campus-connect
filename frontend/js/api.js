@@ -58,6 +58,13 @@ const api = {
         }, "Failed to create event");
     },
 
+    async deleteEvent(eventId, token) {
+        return apiRequest(`/events/${encodeURIComponent(eventId)}`, {
+            method: "DELETE",
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        }, "Unable to delete event.");
+    },
+
     async login(email, password) {
         return apiRequest("/login", {
             method: "POST",

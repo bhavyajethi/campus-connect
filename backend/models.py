@@ -2,6 +2,7 @@ import uuid
 import enum
 from sqlalchemy import Boolean, Column, String, Integer, ForeignKey, Enum, Date, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 from database import Base
 
 # --- Enums for Data Validation ---
@@ -25,6 +26,7 @@ class User(Base):
     role = Column(Enum(RoleEnum), default=RoleEnum.student, nullable=False)
     year = Column(Integer, nullable=True) # Year is optional (volunteers/organizers might not need it)
     password_hash = Column(String, nullable=False)
+    registrations = relationship("Registration", back_populates="user")
 
 class Event(Base):
     __tablename__ = "events"
@@ -36,6 +38,7 @@ class Event(Base):
     category = Column(String, nullable=False, default="Tech", server_default="Tech")
     venue = Column(String, nullable=False, default="Campus venue", server_default="Campus venue")
     capacity = Column(Integer, nullable=False, default=100, server_default="100")
+    registrations = relationship("Registration", back_populates="event", cascade="all, delete-orphan")
 
 class Registration(Base):
     __tablename__ = "registrations"
@@ -44,6 +47,8 @@ class Registration(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     event_id = Column(UUID(as_uuid=True), ForeignKey("events.id"), nullable=False)
+    user = relationship("User", back_populates="registrations")
+    event = relationship("Event", back_populates="registrations")
     
     # This is the secret code that will be embedded in the QR Code!
     ticket_uuid = Column(UUID(as_uuid=True), unique=True, default=uuid.uuid4, index=True)

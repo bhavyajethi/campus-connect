@@ -1,13 +1,17 @@
-from fastapi import FastAPI, Depends, status, HTTPException 
+from fastapi import FastAPI, Depends, status, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.responses import Response
 from uuid import UUID
+import os
+import smtplib
 import schemas
 import qrcode
 import io
 import csv
 from io import StringIO
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
@@ -26,6 +30,31 @@ import models
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
+
+def send_event_notification(action_type: str, event_name: str, user_email: str):
+    print(f"[EMAIL NOTIFICATION] Action: {action_type} | Event: {event_name} | Target: {user_email}")
+    smtp_host = os.getenv("SMTP_HOST")
+    smtp_port = int(os.getenv("SMTP_PORT", "587") or "587")
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_password = os.getenv("SMTP_PASSWORD")
+    if not smtp_host or not smtp_user or not smtp_password:
+        return
+
+    sender = os.getenv("SMTP_FROM", "noreply@campusconnect.local")
+    msg = MIMEMultipart()
+    msg["From"] = sender
+    msg["To"] = user_email
+    msg["Subject"] = f"Campus Connect Event Notification: {action_type}"
+    body = f"Action: {action_type}\nEvent: {event_name}\nTarget: {user_email}"
+    msg.attach(MIMEText(body, "plain"))
+
+    try:
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+            server.send_message(msg)
+    except Exception as exc:
+        print(f"[EMAIL ERROR] Failed to send notification: {exc}")
 
 @app.on_event("startup")
 def seed_admin_account():
@@ -95,6 +124,7 @@ def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
 @app.post("/events/", response_model=schemas.EventResponse, status_code=status.HTTP_201_CREATED)
 def create_event(
     event: schemas.EventCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
@@ -117,6 +147,8 @@ def create_event(
     db.commit()
     db.refresh(new_event)
 
+    background_tasks.add_task(send_event_notification, "CREATED", event.name, current_user.email)
+
     return {
         "id": new_event.id,
         "name": new_event.name,
@@ -128,6 +160,31 @@ def create_event(
         "current_registrations": 0,
         "seats_remaining": new_event.capacity,
     }
+
+@app.delete("/events/{event_id}")
+def delete_event(
+    event_id: UUID,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    role = current_user.role.value if isinstance(current_user.role, models.RoleEnum) else current_user.role
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    event = db.query(models.Event).filter(models.Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    registrations = db.query(models.Registration).filter(models.Registration.event_id == event_id).all()
+    for registration in registrations:
+        user = db.query(models.User).filter(models.User.id == registration.user_id).first()
+        if user and user.email:
+            background_tasks.add_task(send_event_notification, "CANCELLED", event.name, user.email)
+
+    db.delete(event)
+    db.commit()
+    return {"detail": "Event deleted successfully"}
 
 # STEP 6: Event Listing Endpoint (GET)
 @app.get("/events/", response_model=List[schemas.EventResponse])
