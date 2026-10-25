@@ -754,6 +754,8 @@ function initializeApp() {
 
     document.getElementById('event-create-form').addEventListener('submit', async (event) => {
         event.preventDefault();
+        const createEventForm = document.getElementById('event-create-form');
+        const modal = document.getElementById('create-event-modal');
         const user = getSessionUser();
         const token = localStorage.getItem('token');
         if (!token || user?.role !== 'admin') return showToast('Admin access is required to create events.', 'error');
@@ -767,12 +769,12 @@ function initializeApp() {
         };
         try {
             await api.createEvent(eventData, token);
-            event.currentTarget.reset();
-            closeEventModal();
+            if (modal) modal.classList.add('hidden');
+            if (createEventForm) createEventForm.reset();
+            showToast('Event created successfully!', 'success');
             await loadEvents();
-            showToast('Event created successfully.', 'success');
         } catch (error) {
-            showToast(`Unable to create event: ${error.message}`, 'error');
+            showToast(error.message || 'Failed to create event', 'error');
         }
     });
 

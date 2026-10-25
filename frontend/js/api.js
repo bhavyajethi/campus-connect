@@ -55,7 +55,7 @@ const api = {
                 ...(token ? { Authorization: `Bearer ${token}` } : {})
             },
             body: JSON.stringify(eventData)
-        }, "Unable to create event.");
+        }, "Failed to create event");
     },
 
     async login(email, password) {
