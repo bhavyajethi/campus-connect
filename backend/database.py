@@ -11,6 +11,12 @@ load_dotenv()
 # If it can't find it, it defaults to a local sqlite database (just in case)
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
 
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable is missing on Render!")
+
 # The Engine is the core interface to the database.
 engine = create_engine(SQLALCHEMY_DATABASE_URL,
                         pool_pre_ping=True,  # Checks if connection is alive before sending queries
