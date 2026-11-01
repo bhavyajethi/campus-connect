@@ -5,6 +5,7 @@ psycopg2-binary
 psycopg[binary]
 python-dotenv
 pydantic[email]
-bcrypt
+passlib[bcrypt]
+bcrypt==4.0.1
 python-jose[cryptography]
 qrcode[pil]
