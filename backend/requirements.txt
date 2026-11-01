@@ -1,6 +1,9 @@
-fastapi==0.140.0
-uvicorn==0.51.0
+fastapi
+uvicorn
 sqlalchemy
 psycopg2-binary
 python-dotenv
 pydantic[email]
+passlib[bcrypt]
+python-jose[cryptography]
+qrcode[pil]
