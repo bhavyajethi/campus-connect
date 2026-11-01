@@ -20,14 +20,15 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 # In backend/auth.py
 
 def hash_password(password: str) -> str:
-    # Bcrypt only evaluates up to the first 72 bytes.
-    # Truncate string bytes to prevent bcrypt 72-byte error
-    truncated_password = password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
-    return pwd_context.hash(truncated_password)
+    # Truncate to 72 bytes to avoid bcrypt error
+    password_bytes = password.encode('utf-8')[:72]
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password_bytes, salt).decode('utf-8')
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    truncated_password = plain_password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
-    return pwd_context.verify(truncated_password, hashed_password)
+    plain_bytes = plain_password.encode('utf-8')[:72]
+    hashed_bytes = hashed_password.encode('utf-8')
+    return bcrypt.checkpw(plain_bytes, hashed_bytes)
 
 # 2. JWT Token Generation
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
