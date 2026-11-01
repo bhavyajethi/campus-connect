@@ -1,4 +1,4 @@
-const API_BASE = "http://127.0.0.1:8000";
+// const API_BASE = "http://127.0.0.1:8000";
 const BASE_URL = "https://campus-connect-2r3p.onrender.com/";
 
 async function apiRequest(path, options = {}, fallbackMessage = "Request failed") {
