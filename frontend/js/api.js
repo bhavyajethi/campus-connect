@@ -1,5 +1,4 @@
-// const API_BASE = "http://127.0.0.1:8000";
-const API_BASE_URL = "https://campus-connect-2r3p.onrender.com";
+const API_BASE = "https://campus-connect-2r3p.onrender.com";
 
 async function apiRequest(path, options = {}, fallbackMessage = "Request failed") {
     const headers = new Headers(options.headers || {});
@@ -25,7 +24,7 @@ async function apiRequest(path, options = {}, fallbackMessage = "Request failed"
         }
     }
 
-    if (response.status === 401) {
+    if (response.status === 401 && path !== "/login") {
         localStorage.removeItem("token");
         localStorage.removeItem("user");
         if (typeof updateAuthUI === "function") updateAuthUI();
@@ -97,10 +96,7 @@ const api = {
     async registerAuthenticated(eventId, token) {
         return apiRequest(`/registrations/authenticated/?event_id=${encodeURIComponent(eventId)}`, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                ...(token ? { Authorization: `Bearer ${token}` } : {})
-            }
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
         }, "Unable to register for event.");
     },
 
